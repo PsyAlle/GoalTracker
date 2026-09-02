@@ -1,0 +1,727 @@
+/* ==========================================================================
+   Design tokens
+   Archive / logbook feel: paper background, stamped-ledger numerals in mono,
+   serif for everything read as prose. Moss green is the only color accent;
+   everything else stays within a warm neutral (paper/ink) range.
+   ========================================================================== */
+:root {
+  --paper: #eeebe0;
+  --paper-raised: #f6f4ea;
+  --ink: #2b2a25;
+  --ink-muted: #726f60;
+  --ink-faint: #a9a596;
+  --hairline: #d9d5c5;
+  --moss: #4c5e3f;
+  --moss-dim: #7c8a6d;
+  --moss-wash: #e2e6da;
+  --rust: #8c4a3a;
+  --rust-wash: #ece0da;
+
+  --font-serif: 'Source Serif 4', Georgia, 'Times New Roman', serif;
+  --font-mono: 'JetBrains Mono', 'SF Mono', Consolas, monospace;
+
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
+  --space-6: 32px;
+  --space-7: 48px;
+
+  --radius: 7px;
+  --shadow-soft: 0 1px 2px rgba(43, 42, 37, 0.06), 0 2px 8px rgba(43, 42, 37, 0.05);
+  --tabbar-height: 60px;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  background: var(--paper);
+  color: var(--ink);
+}
+
+body {
+  font-family: var(--font-serif);
+  font-size: 16px;
+  line-height: 1.55;
+  -webkit-font-smoothing: antialiased;
+  min-height: 100vh;
+  min-height: 100dvh;
+}
+
+button,
+input,
+textarea,
+select {
+  font-family: inherit;
+  font-size: inherit;
+  color: inherit;
+}
+
+a {
+  color: var(--moss);
+}
+
+.num {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ==========================================================================
+   App shell
+   ========================================================================== */
+#app {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+  min-height: 100dvh;
+}
+
+.topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-3) var(--space-4);
+  border-bottom: 1px solid var(--hairline);
+}
+
+.topbar h1 {
+  font-size: 0.95rem;
+  font-weight: 600;
+  margin: 0;
+  letter-spacing: 0.01em;
+}
+
+.main {
+  flex: 1;
+  overflow-y: auto;
+  padding: var(--space-4) var(--space-4) var(--space-7);
+  max-width: 640px;
+  width: 100%;
+  margin: 0 auto;
+}
+
+/* ==========================================================================
+   Bottom tab bar
+   ========================================================================== */
+.tabbar {
+  position: sticky;
+  bottom: 0;
+  display: flex;
+  border-top: 1px solid var(--hairline);
+  background: var(--paper-raised);
+  height: var(--tabbar-height);
+}
+
+.tabbar button {
+  flex: 1;
+  background: none;
+  border: none;
+  font-size: 0.8rem;
+  color: var(--ink-muted);
+  cursor: pointer;
+  padding: var(--space-2);
+  border-top: 2px solid transparent;
+}
+
+.tabbar button.active {
+  color: var(--moss);
+  border-top-color: var(--moss);
+  font-weight: 600;
+}
+
+/* ==========================================================================
+   Section / ledger rows
+   ========================================================================== */
+.section-title {
+  font-size: 0.72rem;
+  letter-spacing: 0.06em;
+  color: var(--ink-muted);
+  margin: var(--space-6) 0 var(--space-2);
+}
+
+.section-title:first-child {
+  margin-top: 0;
+}
+
+.ledger {
+  border-top: 1px solid var(--hairline);
+}
+
+.ledger-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-3) 0;
+  border-bottom: 1px solid var(--hairline);
+}
+
+.ledger-row .name {
+  flex: 1;
+  min-width: 0;
+}
+
+.ledger-row .name.clickable {
+  cursor: pointer;
+}
+
+.ledger-row .name .goal-name {
+  display: block;
+}
+
+.ledger-row .name .goal-meta {
+  display: block;
+  font-size: 0.78rem;
+  color: var(--ink-muted);
+  margin-top: 2px;
+}
+
+.ledger-row .name .goal-meta a {
+  color: var(--moss-dim);
+}
+
+.progress-figure {
+  font-family: var(--font-mono);
+  font-size: 0.95rem;
+  white-space: nowrap;
+}
+
+.progress-figure .done {
+  color: var(--ink);
+}
+
+.progress-figure .slash {
+  color: var(--ink-faint);
+  margin: 0 1px;
+}
+
+.progress-figure .target {
+  color: var(--ink-muted);
+}
+
+.progress-figure.met .done {
+  color: var(--moss);
+}
+
+/* ==========================================================================
+   Stepper (+ / -)
+   ========================================================================== */
+.stepper {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.stepper button {
+  width: 30px;
+  height: 30px;
+  border: 1px solid var(--hairline);
+  background: var(--paper-raised);
+  border-radius: var(--radius);
+  font-size: 1rem;
+  line-height: 1;
+  cursor: pointer;
+  color: var(--ink);
+  box-shadow: var(--shadow-soft);
+  transition: transform 0.08s ease, background 0.15s ease;
+}
+
+.stepper button:active {
+  background: var(--moss-wash);
+  border-color: var(--moss-dim);
+  transform: scale(0.92);
+  box-shadow: none;
+}
+
+.stepper button.minus {
+  color: var(--ink-muted);
+}
+
+/* ==========================================================================
+   Progress ring — combined weekly + daily goal completion
+   ========================================================================== */
+.progress-ring-wrap {
+  position: relative;
+  width: 84px;
+  height: 84px;
+  flex-shrink: 0;
+}
+
+.progress-ring-wrap.small {
+  width: 52px;
+  height: 52px;
+}
+
+.progress-ring {
+  width: 100%;
+  height: 100%;
+  transform: rotate(-90deg);
+}
+
+.ring-track {
+  fill: none;
+  stroke: var(--hairline);
+  stroke-width: 8;
+}
+
+.ring-fill {
+  fill: none;
+  stroke: var(--moss);
+  stroke-width: 8;
+  stroke-linecap: round;
+  transition: stroke-dashoffset 0.4s ease;
+}
+
+.ring-label {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+
+.ring-pct {
+  font-family: var(--font-mono);
+  font-size: 1.1rem;
+  color: var(--ink);
+}
+
+.progress-ring-wrap.small .ring-pct {
+  font-size: 0.78rem;
+}
+
+/* ==========================================================================
+   Period header
+   ========================================================================== */
+.period-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+  margin-bottom: var(--space-5);
+}
+
+.period-header .period-week {
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  color: var(--moss);
+}
+
+.period-header h2 {
+  font-size: 1.4rem;
+  margin: var(--space-1) 0 var(--space-1);
+}
+
+.period-header .period-desc {
+  color: var(--ink-muted);
+  font-size: 0.92rem;
+  margin: 0;
+}
+
+/* ==========================================================================
+   Buttons
+   ========================================================================== */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius);
+  border: 1px solid var(--hairline);
+  background: var(--paper-raised);
+  cursor: pointer;
+  font-size: 0.92rem;
+  color: var(--ink);
+}
+
+.btn.primary {
+  background: var(--moss);
+  border-color: var(--moss);
+  color: var(--paper-raised);
+}
+
+.btn.primary:active {
+  opacity: 0.85;
+}
+
+.btn.danger {
+  border-color: var(--rust);
+  color: var(--rust);
+  background: var(--rust-wash);
+}
+
+.btn.text {
+  border-color: transparent;
+  background: none;
+  color: var(--moss);
+  padding: var(--space-2);
+}
+
+.btn.block {
+  display: flex;
+  width: 100%;
+}
+
+.btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* ==========================================================================
+   Forms
+   ========================================================================== */
+.field {
+  margin-bottom: var(--space-4);
+}
+
+.field label {
+  display: block;
+  font-size: 0.78rem;
+  color: var(--ink-muted);
+  margin-bottom: var(--space-1);
+}
+
+.field input[type='text'],
+.field input[type='number'],
+.field input[type='url'],
+.field textarea {
+  width: 100%;
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius);
+  background: var(--paper-raised);
+}
+
+.field textarea {
+  resize: vertical;
+  min-height: 60px;
+}
+
+.field-row {
+  display: flex;
+  gap: var(--space-3);
+}
+
+.field-row .field {
+  flex: 1;
+}
+
+.weekday-picker {
+  display: flex;
+  gap: var(--space-1);
+}
+
+.weekday-picker button {
+  flex: 1;
+  padding: var(--space-2) 0;
+  border: 1px solid var(--hairline);
+  background: var(--paper-raised);
+  border-radius: var(--radius);
+  font-size: 0.75rem;
+  cursor: pointer;
+  color: var(--ink-muted);
+}
+
+.weekday-picker button.on {
+  background: var(--moss-wash);
+  border-color: var(--moss-dim);
+  color: var(--moss);
+  font-weight: 600;
+}
+
+/* ==========================================================================
+   Slider (long-term goal assessment)
+   ========================================================================== */
+.slider-block {
+  margin-bottom: var(--space-6);
+  padding-bottom: var(--space-5);
+  border-bottom: 1px solid var(--hairline);
+}
+
+.slider-block .goal-name {
+  font-size: 1.02rem;
+  margin-bottom: var(--space-1);
+}
+
+.slider-block .previous-score {
+  font-size: 0.8rem;
+  color: var(--ink-muted);
+  margin-bottom: var(--space-3);
+}
+
+.slider-block input[type='range'] {
+  width: 100%;
+  accent-color: var(--moss);
+}
+
+.slider-block .score-readout {
+  font-family: var(--font-mono);
+  font-size: 1.3rem;
+  color: var(--moss);
+  text-align: center;
+  margin: var(--space-2) 0;
+}
+
+/* ==========================================================================
+   Empty states
+   ========================================================================== */
+.empty-state {
+  text-align: center;
+  padding: var(--space-7) var(--space-4);
+  color: var(--ink-muted);
+}
+
+.empty-state h2 {
+  color: var(--ink);
+  font-size: 1.2rem;
+}
+
+/* ==========================================================================
+   Overflow menu + modal
+   ========================================================================== */
+.overflow-btn {
+  background: none;
+  border: none;
+  font-size: 1.3rem;
+  color: var(--ink-muted);
+  cursor: pointer;
+  padding: 0 var(--space-2);
+  line-height: 1;
+}
+
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(43, 42, 37, 0.4);
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  z-index: 100;
+}
+
+.modal-sheet {
+  background: var(--paper-raised);
+  width: 100%;
+  max-width: 640px;
+  max-height: 88vh;
+  overflow-y: auto;
+  border-radius: var(--radius) var(--radius) 0 0;
+  padding: var(--space-5) var(--space-4) var(--space-6);
+  border-top: 1px solid var(--hairline);
+}
+
+.modal-sheet h2 {
+  margin-top: 0;
+  font-size: 1.15rem;
+}
+
+.modal-close-bar {
+  width: 36px;
+  height: 4px;
+  background: var(--hairline);
+  border-radius: 999px;
+  margin: 0 auto var(--space-4);
+}
+
+.modal-actions {
+  display: flex;
+  gap: var(--space-3);
+  margin-top: var(--space-5);
+}
+
+.menu-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.menu-list li button {
+  width: 100%;
+  text-align: left;
+  padding: var(--space-3) 0;
+  background: none;
+  border: none;
+  border-bottom: 1px solid var(--hairline);
+  font-size: 0.95rem;
+  cursor: pointer;
+  color: var(--ink);
+}
+
+.menu-list li:last-child button {
+  border-bottom: none;
+}
+
+.menu-list li button.danger {
+  color: var(--rust);
+}
+
+.links-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  margin-bottom: var(--space-2);
+}
+
+.links-list .link-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 0.85rem;
+  padding: var(--space-1) 0;
+}
+
+.links-list .link-item a {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.links-list .link-item button {
+  background: none;
+  border: none;
+  color: var(--ink-muted);
+  cursor: pointer;
+}
+
+.goal-card {
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius);
+  padding: var(--space-4);
+  margin-bottom: var(--space-3);
+  background: var(--paper-raised);
+}
+
+.goal-card .goal-card-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: var(--space-3);
+}
+
+.goal-card .goal-card-actions {
+  display: flex;
+  gap: var(--space-2);
+}
+
+.goal-card .goal-card-actions button {
+  background: none;
+  border: none;
+  color: var(--ink-muted);
+  font-size: 0.8rem;
+  cursor: pointer;
+  text-decoration: underline;
+}
+
+.planning-banner {
+  background: var(--moss-wash);
+  border: 1px solid var(--moss-dim);
+  border-radius: var(--radius);
+  padding: var(--space-4);
+  margin-bottom: var(--space-5);
+  font-size: 0.88rem;
+  color: var(--moss);
+}
+
+.planning-banner strong {
+  display: block;
+  margin-bottom: 2px;
+  color: var(--ink);
+}
+
+.history-period-row {
+  display: block;
+  width: 100%;
+  text-align: left;
+  background: none;
+  border: none;
+  border-bottom: 1px solid var(--hairline);
+  padding: var(--space-4) 0;
+  cursor: pointer;
+}
+
+.history-period-row .h-dates {
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  color: var(--ink-muted);
+}
+
+.history-period-row .h-name {
+  font-size: 1.05rem;
+  margin-top: 2px;
+}
+
+.back-link {
+  background: none;
+  border: none;
+  color: var(--moss);
+  cursor: pointer;
+  padding: 0;
+  margin-bottom: var(--space-4);
+  font-size: 0.88rem;
+}
+
+.week-tabs {
+  display: flex;
+  gap: var(--space-2);
+  margin-bottom: var(--space-4);
+}
+
+.week-tabs button {
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--hairline);
+  background: var(--paper-raised);
+  border-radius: var(--radius);
+  cursor: pointer;
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  color: var(--ink-muted);
+}
+
+.week-tabs button.active {
+  border-color: var(--moss);
+  color: var(--moss);
+  font-weight: 600;
+}
+
+.toast {
+  position: fixed;
+  bottom: calc(var(--tabbar-height) + var(--space-3));
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--ink);
+  color: var(--paper-raised);
+  padding: var(--space-2) var(--space-4);
+  border-radius: var(--radius);
+  font-size: 0.85rem;
+  z-index: 200;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .toast {
+    animation: fade-up 0.2s ease-out;
+  }
+}
+
+@keyframes fade-up {
+  from {
+    opacity: 0;
+    transform: translate(-50%, 6px);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, 0);
+  }
+}
+
+:focus-visible {
+  outline: 2px solid var(--moss);
+  outline-offset: 2px;
+}
