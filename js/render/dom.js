@@ -13,23 +13,23 @@ export function el(tag, props = {}, children = []) {
   const [tagName, ...rest] = tag.split(/(?=[.#])/);
   const node = document.createElement(tagName);
   for (const part of rest) {
-    if (part.startsWith('.')) node.classList.add(part.slice(1));
-    else if (part.startsWith('#')) node.id = part.slice(1);
+    if (part.startsWith(".")) node.classList.add(part.slice(1));
+    else if (part.startsWith("#")) node.id = part.slice(1);
   }
 
   for (const [key, value] of Object.entries(props || {})) {
     if (value == null || value === false) continue;
-    if (key === 'text') node.textContent = value;
-    else if (key === 'html') node.innerHTML = value;
-    else if (key.startsWith('on') && typeof value === 'function') {
+    if (key === "text") node.textContent = value;
+    else if (key === "html") node.innerHTML = value;
+    else if (key.startsWith("on") && typeof value === "function") {
       node.addEventListener(key.slice(2).toLowerCase(), value);
-    } else if (key === 'class') {
+    } else if (key === "class") {
       // Note: this REPLACES any classes already added from the tag string
       // (e.g. 'div.stamp' -> classList has 'stamp'). When combining both,
       // include the base class name in the prop value too, e.g.
       // el('div.stamp', { class: isZero ? 'stamp zero' : 'stamp' }).
       node.className = value;
-    } else if (key in node && key !== 'list') {
+    } else if (key in node && key !== "list") {
       try {
         node[key] = value;
       } catch {
@@ -42,7 +42,9 @@ export function el(tag, props = {}, children = []) {
 
   for (const child of [].concat(children)) {
     if (child == null || child === false) continue;
-    node.appendChild(typeof child === 'string' ? document.createTextNode(child) : child);
+    node.appendChild(
+      typeof child === "string" ? document.createTextNode(child) : child,
+    );
   }
   return node;
 }
@@ -58,8 +60,8 @@ export function mount(container, node) {
 
 let toastTimer = null;
 export function toast(message) {
-  document.querySelectorAll('.toast').forEach((n) => n.remove());
-  const node = el('div.toast', { text: message });
+  document.querySelectorAll(".toast").forEach((n) => n.remove());
+  const node = el("div.toast", { text: message });
   document.body.appendChild(node);
   clearTimeout(toastTimer);
   toastTimer = setTimeout(() => node.remove(), 2200);
@@ -70,12 +72,12 @@ export function toast(message) {
  * to render inside the sheet; `closeFn` can be called from inside to dismiss.
  */
 export function openModal(contentBuilder) {
-  const backdrop = el('div.modal-backdrop');
+  const backdrop = el("div.modal-backdrop");
   const close = () => backdrop.remove();
-  backdrop.addEventListener('click', (e) => {
+  backdrop.addEventListener("click", (e) => {
     if (e.target === backdrop) close();
   });
-  const sheet = el('div.modal-sheet', {}, [contentBuilder(close)]);
+  const sheet = el("div.modal-sheet", {}, [contentBuilder(close)]);
   backdrop.appendChild(sheet);
   document.body.appendChild(backdrop);
   return close;
@@ -83,20 +85,129 @@ export function openModal(contentBuilder) {
 
 /** A +/- stepper. onChange(delta) is called with +1 or -1. */
 export function stepper(onChange, { disableMinus = false } = {}) {
-  return el('div.stepper', {}, [
-    el('button.minus', { text: '−', disabled: disableMinus, onClick: () => onChange(-1) }),
-    el('button.plus', { text: '+', onClick: () => onChange(1) }),
+  return el("div.stepper", {}, [
+    el("button.minus", {
+      text: "−",
+      disabled: disableMinus,
+      onClick: () => onChange(-1),
+    }),
+    el("button.plus", { text: "+", onClick: () => onChange(1) }),
   ]);
 }
 
 /** Renders a "3/5" style progress figure, mono, highlighted green when met. */
-export function progressFigure(value, target, unit = '') {
+export function progressFigure(value, target, unit = "") {
   const met = value >= target;
-  return el('span.progress-figure', { class: met ? 'progress-figure met' : 'progress-figure' }, [
-    el('span.done.num', { text: String(value) }),
-    el('span.slash.num', { text: '/' }),
-    el('span.target.num', { text: String(target) + (unit ? ` ${unit}` : '') }),
+  return el(
+    "span.progress-figure",
+    { class: met ? "progress-figure met" : "progress-figure" },
+    [
+      el("span.done.num", { text: String(value) }),
+      el("span.slash.num", { text: "/" }),
+      el("span.target.num", {
+        text: String(target) + (unit ? ` ${unit}` : ""),
+      }),
+    ],
+  );
+}
+
+// Tracks which completed goal rows have been manually expanded back open,
+// keyed by track id. Module-level (not component state) so it survives the
+// full re-render that happens after every write in this app.
+const expandedGoalIds = new Set();
+
+/**
+ * A row of tally boxes standing in for a goal's progress toward `target`,
+ * used instead of progressFigure+stepper when target is small enough for
+ * each box to stay comfortably tappable (see MAX_BOX_TARGET below).
+ *
+ * Tap an empty box to jump the value to that box's position; tap the
+ * currently-last-filled box again to step back by one. Once value reaches
+ * target, the row shows fully filled + a checkmark and collapses to a
+ * compact summary line (name + checkmark) with a chevron to expand it back
+ * open. Going past target ("overshoot") is done via a "+" next to the name,
+ * shown only once target is reached, with the overshoot amount shown as a
+ * small badge that can be tapped to step back down.
+ */
+export const MAX_BOX_TARGET = 10;
+
+export function goalBoxRow({
+  id,
+  name,
+  description,
+  links,
+  value,
+  target,
+  onDelta,
+}) {
+  const complete = value >= target;
+  const over = Math.max(0, value - target);
+  const expanded = expandedGoalIds.has(id);
+  const showBoxes = !complete || expanded;
+
+  const nameSpan = el("span.goal-name", {
+    text: name,
+    class: complete ? "goal-name complete" : "goal-name",
+  });
+  const nameGroup = el(
+    "div.name.clickable",
+    { onClick: () => openGoalDetailModal({ name, description, links }) },
+    [
+      complete ? el("span.goal-check", { text: "✓" }) : null,
+      nameSpan,
+      over > 0
+        ? el("span.goal-overshoot-badge", {
+            text: `+${over}`,
+            onClick: (e) => {
+              e.stopPropagation();
+              onDelta(-1);
+            },
+          })
+        : null,
+    ],
+  );
+
+  const controls = el("div.goal-row-controls", {}, [
+    complete
+      ? el("button.goal-plus-btn", {
+          text: "+",
+          onClick: (e) => {
+            e.stopPropagation();
+            onDelta(1);
+          },
+        })
+      : null,
+    complete
+      ? el("button.goal-chevron", {
+          text: expanded ? "▴" : "▾",
+          onClick: (e) => {
+            e.stopPropagation();
+            if (expanded) expandedGoalIds.delete(id);
+            else expandedGoalIds.add(id);
+            onDelta(0, { refreshOnly: true });
+          },
+        })
+      : null,
   ]);
+
+  const header = el("div.goal-row-header", {}, [nameGroup, controls]);
+  const item = el("div.goal-box-item", {}, [header]);
+
+  if (showBoxes) {
+    const boxRow = el("div.goal-box-row");
+    for (let i = 1; i <= target; i++) {
+      const filled = i <= value;
+      boxRow.appendChild(
+        el("div.goal-box", {
+          class: filled ? "goal-box filled" : "goal-box",
+          onClick: () => onDelta(i === value ? -1 : i - value),
+        }),
+      );
+    }
+    item.appendChild(boxRow);
+  }
+
+  return item;
 }
 
 /**
@@ -105,63 +216,74 @@ export function progressFigure(value, target, unit = '') {
  * after every mutation so the caller can persist it.
  */
 export function linksEditor(links, onChange) {
-  const container = el('div.links-list');
+  const container = el("div.links-list");
 
   function renderList() {
     clear(container);
     links.forEach((link, i) => {
       container.appendChild(
-        el('div.link-item', {}, [
-          el('a', { href: link.url, target: '_blank', rel: 'noopener', text: link.label || link.url }),
-          el('button', {
-            text: 'Ta bort',
+        el("div.link-item", {}, [
+          el("a", {
+            href: link.url,
+            target: "_blank",
+            rel: "noopener",
+            text: link.label || link.url,
+          }),
+          el("button", {
+            text: "Ta bort",
             onClick: () => {
               links.splice(i, 1);
               renderList();
               onChange();
             },
           }),
-        ])
+        ]),
       );
     });
   }
   renderList();
 
-  const labelInput = el('input', { type: 'text', placeholder: 'Namn (valfritt)' });
-  const urlInput = el('input', { type: 'url', placeholder: 'https://…' });
-  const addBtn = el('button.btn', {
-    text: 'Lägg till länk',
-    type: 'button',
+  const labelInput = el("input", {
+    type: "text",
+    placeholder: "Namn (valfritt)",
+  });
+  const urlInput = el("input", { type: "url", placeholder: "https://…" });
+  const addBtn = el("button.btn", {
+    text: "Lägg till länk",
+    type: "button",
     onClick: () => {
       const url = urlInput.value.trim();
       if (!url) return;
       links.push({ label: labelInput.value.trim(), url });
-      labelInput.value = '';
-      urlInput.value = '';
+      labelInput.value = "";
+      urlInput.value = "";
       renderList();
       onChange();
     },
   });
 
-  return el('div', {}, [
+  return el("div", {}, [
     container,
-    el('div.field-row', {}, [el('div.field', {}, [labelInput]), el('div.field', {}, [urlInput])]),
+    el("div.field-row", {}, [
+      el("div.field", {}, [labelInput]),
+      el("div.field", {}, [urlInput]),
+    ]),
     addBtn,
   ]);
 }
 
 export function weekdayPicker(selected, onChange) {
-  const labels = { 1: 'M', 2: 'T', 3: 'O', 4: 'T', 5: 'F' };
-  const container = el('div.weekday-picker');
+  const labels = { 1: "M", 2: "T", 3: "O", 4: "T", 5: "F" };
+  const container = el("div.weekday-picker");
   function render() {
     clear(container);
     for (const wd of [1, 2, 3, 4, 5]) {
       const on = selected.includes(wd);
       container.appendChild(
-        el('button', {
-          type: 'button',
+        el("button", {
+          type: "button",
           text: labels[wd],
-          class: on ? 'on' : '',
+          class: on ? "on" : "",
           onClick: () => {
             const idx = selected.indexOf(wd);
             if (idx >= 0) selected.splice(idx, 1);
@@ -170,7 +292,7 @@ export function weekdayPicker(selected, onChange) {
             render();
             onChange();
           },
-        })
+        }),
       );
     }
   }
@@ -180,7 +302,7 @@ export function weekdayPicker(selected, onChange) {
 
 // --- SVG progress ring (combined weekly + daily goal completion) ---
 
-const SVG_NS = 'http://www.w3.org/2000/svg';
+const SVG_NS = "http://www.w3.org/2000/svg";
 
 function svgEl(tag, attrs = {}) {
   const node = document.createElementNS(SVG_NS, tag);
@@ -192,23 +314,32 @@ function svgEl(tag, attrs = {}) {
  * A circular progress indicator, 0-100. `size: 'small'` renders a compact
  * version meant to sit inline next to a heading (e.g. the period header).
  */
-export function progressRing(pct, size = 'normal') {
+export function progressRing(pct, size = "normal") {
   const r = 40;
   const c = 2 * Math.PI * r;
   const clamped = Math.min(Math.max(pct, 0), 100);
   const offset = c - (clamped / 100) * c;
 
-  const svg = svgEl('svg', { class: 'progress-ring', viewBox: '0 0 100 100' });
-  svg.appendChild(svgEl('circle', { class: 'ring-track', cx: 50, cy: 50, r }));
-  const fill = svgEl('circle', { class: 'ring-fill', cx: 50, cy: 50, r });
+  const svg = svgEl("svg", { class: "progress-ring", viewBox: "0 0 100 100" });
+  svg.appendChild(svgEl("circle", { class: "ring-track", cx: 50, cy: 50, r }));
+  const fill = svgEl("circle", { class: "ring-fill", cx: 50, cy: 50, r });
   fill.style.strokeDasharray = String(c);
   fill.style.strokeDashoffset = String(offset);
   svg.appendChild(fill);
 
-  return el('div.progress-ring-wrap', { class: size === 'small' ? 'progress-ring-wrap small' : 'progress-ring-wrap' }, [
-    svg,
-    el('div.ring-label', {}, [el('span.ring-pct.num', { text: Math.round(pct) + '%' })]),
-  ]);
+  return el(
+    "div.progress-ring-wrap",
+    {
+      class:
+        size === "small" ? "progress-ring-wrap small" : "progress-ring-wrap",
+    },
+    [
+      svg,
+      el("div.ring-label", {}, [
+        el("span.ring-pct.num", { text: Math.round(pct) + "%" }),
+      ]),
+    ],
+  );
 }
 
 /**
@@ -219,19 +350,28 @@ export function progressRing(pct, size = 'normal') {
 export function openGoalDetailModal({ name, description, links }) {
   openModal((close) => {
     const children = [
-      el('div.modal-close-bar'),
-      el('h2', { text: name }),
-      el('p.goal-meta', { text: description || 'Ingen beskrivning satt.' }),
+      el("div.modal-close-bar"),
+      el("h2", { text: name }),
+      el("p.goal-meta", { text: description || "Ingen beskrivning satt." }),
     ];
     if (links && links.length) {
       children.push(
         el(
-          'div.links-list',
+          "div.links-list",
           {},
-          links.map((l) => el('div.link-item', {}, [el('a', { href: l.url, target: '_blank', rel: 'noopener', text: l.label || l.url })]))
-        )
+          links.map((l) =>
+            el("div.link-item", {}, [
+              el("a", {
+                href: l.url,
+                target: "_blank",
+                rel: "noopener",
+                text: l.label || l.url,
+              }),
+            ]),
+          ),
+        ),
       );
     }
-    return el('div', {}, children);
+    return el("div", {}, children);
   });
 }
