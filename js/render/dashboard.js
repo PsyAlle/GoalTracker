@@ -101,7 +101,7 @@ async function renderActiveView(period) {
   root.appendChild(renderWeeklyGoalsBlock(weeklyGoals, currentWeek));
 
   root.appendChild(
-    el("button.btn.block", {
+    el("button.btn.primary.block", {
       text: "+ Logga pass",
       style: "margin-top: var(--space-6)",
       onClick: () =>
