@@ -4,7 +4,7 @@
 // pub/sub layer so UI code can react to writes without a framework.
 
 const DB_NAME = 'loggboken';
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 
 /** @type {IDBDatabase|null} */
 let dbInstance = null;
@@ -71,6 +71,12 @@ export function openDb() {
         const s = db.createObjectStore('longTermGoalAssessments', { keyPath: 'id' });
         s.createIndex('goalId', 'goalId', { unique: false });
         s.createIndex('periodId', 'periodId', { unique: false });
+      }
+
+      if (!db.objectStoreNames.contains('sessionLogs')) {
+        const s = db.createObjectStore('sessionLogs', { keyPath: 'id' });
+        s.createIndex('periodId', 'periodId', { unique: false });
+        s.createIndex('date', 'date', { unique: false });
       }
 
       if (!db.objectStoreNames.contains('meta')) {
@@ -212,5 +218,6 @@ export const ALL_STORES = [
   'dailyProgressEvents',
   'longTermGoals',
   'longTermGoalAssessments',
+  'sessionLogs',
   'meta',
 ];

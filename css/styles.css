@@ -147,11 +147,21 @@
      Section / ledger rows
      ========================================================================== */
   .section-title {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
     font-size: 0.85rem;
-    font-weight: 600;
-    letter-spacing: 0.06em;
-    color: var(--ink);
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    color: var(--moss);
     margin: var(--space-6) 0 var(--space-2);
+  }
+
+  .section-title::after {
+    content: "";
+    flex: 1;
+    height: 1px;
+    background: var(--hairline);
   }
   
   .section-title:first-child {
@@ -182,6 +192,8 @@
   
   .goal-name {
     text-transform: uppercase;
+    font-size: 0.9rem;
+    letter-spacing: 0.02em;
   }
   
   .ledger-row .name .goal-name {

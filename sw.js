@@ -3,7 +3,7 @@
 // Bump CACHE_VERSION whenever any precached file changes, so returning
 // users pick up the new version instead of a stale cached one.
 
-const CACHE_VERSION = "loggboken-v5";
+const CACHE_VERSION = "loggboken-v9";
 
 const PRECACHE_URLS = [
   "./",
@@ -17,8 +17,10 @@ const PRECACHE_URLS = [
   "./js/domain/goals.js",
   "./js/domain/longTermGoals.js",
   "./js/domain/exportImport.js",
+  "./js/domain/sessionLogs.js",
   "./js/render/dom.js",
   "./js/render/goalForms.js",
+  "./js/render/sessionLogForm.js",
   "./js/render/goalsPage.js",
   "./js/render/dashboard.js",
   "./js/render/history.js",

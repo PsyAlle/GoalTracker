@@ -36,9 +36,11 @@ import {
   latestAssessment,
 } from "../domain/longTermGoals.js";
 import { openWeeklyGoalForm, openDailyGoalForm } from "./goalForms.js";
+import { openSessionLogForm } from "./sessionLogForm.js";
 import { store } from "../db.js";
 import {
   todayStr,
+  addDays,
   daysBetween,
   formatDateHuman,
   WEEKDAY_LABELS,
@@ -82,31 +84,72 @@ async function renderActiveView(period) {
   const today = todayStr();
   const currentWeek = weekNumberInPeriod(period.startDate, today) || 4;
 
-  // Fetched once and reused by both the header (for the progress ring) and
-  // the two goal blocks below, instead of each part re-querying the DB.
-  const dailyGoals = await dailyGoalsForDate(period.id, today);
+  // Today's daily goals, used only for the "DAGENS MÅL" block.
+  const dailyGoalsToday = await dailyGoalsForDate(period.id, today);
   const weeklyGoals = await weeklyGoalsForWeek(period.id, currentWeek);
+
+  // Every daily-goal instance across all 7 days of the current week, used
+  // for the header ring so 100% means "every daily goal on every applicable
+  // day this week, plus every weekly goal" — not just today's snapshot.
+  const weekDailyGoals = await collectWeekDailyGoals(period, currentWeek);
 
   const root = el("div");
   root.appendChild(
-    renderPeriodHeader(period, currentWeek, dailyGoals, weeklyGoals),
+    renderPeriodHeader(period, currentWeek, weekDailyGoals, weeklyGoals),
   );
-  root.appendChild(renderDailyGoalsBlock(dailyGoals, today));
+  root.appendChild(renderDailyGoalsBlock(dailyGoalsToday, today));
   root.appendChild(renderWeeklyGoalsBlock(weeklyGoals, currentWeek));
+
+  root.appendChild(
+    el("button.btn.block", {
+      text: "+ Logga pass",
+      style: "margin-top: var(--space-6)",
+      onClick: () =>
+        openSessionLogForm({
+          periodId: period.id,
+          dateStr: today,
+          minDate: period.startDate,
+          maxDate: today,
+          onSaved: refresh,
+        }),
+    }),
+  );
 
   return root;
 }
 
-/** Combined completion (0-100) across today's daily goals + this week's weekly goals. */
-function weekProgressPercent(dailyGoals, weeklyGoals) {
-  const all = [...dailyGoals, ...weeklyGoals];
-  const sumValue = all.reduce(
-    (s, g) => s + Math.min(g.value, g.version.targetValue),
+/** All applicable daily-goal instances (one per track per applicable date)
+ *  across the 7 calendar days belonging to `weekNumber` of `period`. */
+async function collectWeekDailyGoals(period, weekNumber) {
+  const weekStart = addDays(period.startDate, (weekNumber - 1) * 7);
+  const instances = [];
+  for (let i = 0; i < 7; i++) {
+    const date = addDays(weekStart, i);
+    if (date > period.endDate) break;
+    const dayGoals = await dailyGoalsForDate(period.id, date);
+    instances.push(...dayGoals);
+  }
+  return instances;
+}
+
+/**
+ * Combined completion (0-100) for a full week: every daily-goal instance
+ * across the week's applicable days, plus every weekly goal. Each goal
+ * instance counts equally regardless of its target size — a fully
+ * completed daily goal (e.g. target 5) is worth exactly as much as a fully
+ * completed weekly goal (e.g. target 1) — and days/goals not yet done
+ * simply haven't contributed their share yet, so 100% is only reached once
+ * every daily goal has been met on every day it applies this week, and
+ * every weekly goal has been met.
+ */
+function weekProgressPercent(weekDailyGoals, weeklyGoals) {
+  const all = [...weekDailyGoals, ...weeklyGoals];
+  if (all.length === 0) return 0;
+  const sumRatios = all.reduce(
+    (s, g) => s + Math.min(g.value / g.version.targetValue, 1),
     0,
   );
-  const sumTarget = all.reduce((s, g) => s + g.version.targetValue, 0);
-  if (sumTarget === 0) return 0;
-  return Math.round((sumValue / sumTarget) * 100);
+  return Math.round((sumRatios / all.length) * 100);
 }
 
 function renderPeriodHeader(period, currentWeek, dailyGoals, weeklyGoals) {

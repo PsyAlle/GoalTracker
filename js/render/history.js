@@ -3,6 +3,7 @@ import { el, mount, progressFigure } from './dom.js';
 import { getClosedPeriods } from '../domain/periodLifecycle.js';
 import { getWeeklyTracks, getWeeklyVersions, weeklyProgressValue, getDailyTracks, getDailyVersions, dailyProgressValue } from '../domain/goals.js';
 import { getAllAssessmentsForPeriod } from '../domain/longTermGoals.js';
+import { getSessionLogsForPeriod, deleteSessionLog, resolveGoalRefName } from '../domain/sessionLogs.js';
 import { store } from '../db.js';
 import { formatDateHuman, addDays, isoWeekday, WEEKDAY_LABELS } from '../domain/dates.js';
 
@@ -49,8 +50,48 @@ async function renderPeriodDetail(container, period) {
   root.appendChild(await renderAssessmentsHistory(period));
   root.appendChild(await renderWeeklyHistory(period));
   root.appendChild(await renderDailyHistory(period));
+  root.appendChild(await renderSessionLogsHistory(period, container));
 
   mount(container, root);
+}
+
+async function renderSessionLogsHistory(period, container) {
+  const logs = await getSessionLogsForPeriod(period.id);
+  const section = el('div', {}, [el('div.section-title', { text: 'PASSLOGGAR' })]);
+  if (logs.length === 0) {
+    section.appendChild(el('p', { text: 'Inga loggar registrerade för denna period.', class: 'goal-meta' }));
+    return section;
+  }
+
+  const ledger = el('div.ledger');
+  for (const log of logs) {
+    const goalName = await resolveGoalRefName(log.goalRef);
+    ledger.appendChild(
+      el('div.ledger-row', {}, [
+        el('div.name', {}, [
+          el('span.goal-name', { text: formatDateHuman(log.date) }),
+          el('span.goal-meta', {
+            text: [
+              goalName ? goalName : 'Inget mål kopplat',
+              `Readiness ${log.readiness}/10`,
+              `RPE ${log.rpe}/10`,
+              log.note || null,
+            ]
+              .filter(Boolean)
+              .join(' · '),
+          }),
+        ]),
+        el('button.btn.text', {
+          text: 'Ta bort',
+          onClick: async () => {
+            await deleteSessionLog(log.id);
+            renderPeriodDetail(container, period);
+          },
+        }),
+      ])
+    );
+  }
+  return section;
 }
 
 async function renderAssessmentsHistory(period) {
@@ -151,5 +192,6 @@ async function renderDailyHistory(period) {
       ])
     );
   }
+  section.appendChild(ledger);
   return section;
 }
