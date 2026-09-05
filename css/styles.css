@@ -537,6 +537,8 @@
   .field input[type='text'],
   .field input[type='number'],
   .field input[type='url'],
+  .field input[type='date'],
+  .field select,
   .field textarea {
     width: 100%;
     padding: var(--space-2) var(--space-3);
@@ -602,9 +604,12 @@
     margin-bottom: var(--space-3);
   }
   
+  input[type='range'] {
+    accent-color: var(--moss);
+  }
+
   .slider-block input[type='range'] {
     width: 100%;
-    accent-color: var(--moss);
   }
   
   .slider-block .score-readout {
