@@ -12,14 +12,14 @@ export function todayStr() {
 /** @param {Date} d */
 export function toDateStr(d) {
   const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, '0');
-  const day = String(d.getDate()).padStart(2, '0');
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
   return `${y}-${m}-${day}`;
 }
 
 /** @param {string} dateStr YYYY-MM-DD @returns {Date} local midnight */
 export function parseDateStr(dateStr) {
-  const [y, m, d] = dateStr.split('-').map(Number);
+  const [y, m, d] = dateStr.split("-").map(Number);
   return new Date(y, m - 1, d);
 }
 
@@ -62,15 +62,15 @@ export function weekNumberInPeriod(periodStartDate, dateStr) {
 
 export function formatDateHuman(dateStr) {
   const d = parseDateStr(dateStr);
-  return d.toLocaleDateString('sv-SE', { day: 'numeric', month: 'short' });
+  return d.toLocaleDateString("sv-SE", { day: "numeric", month: "short" });
 }
 
 export const WEEKDAY_LABELS = {
-  1: 'Mån',
-  2: 'Tis',
-  3: 'Ons',
-  4: 'Tor',
-  5: 'Fre',
-  6: 'Lör',
-  7: 'Sön',
+  1: "Mån",
+  2: "Tis",
+  3: "Ons",
+  4: "Tor",
+  5: "Fre",
+  6: "Lör",
+  7: "Sön",
 };

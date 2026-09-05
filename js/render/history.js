@@ -1,31 +1,59 @@
 // history.js
-import { el, mount, progressFigure } from './dom.js';
-import { getClosedPeriods } from '../domain/periodLifecycle.js';
-import { getWeeklyTracks, getWeeklyVersions, weeklyVersionForWeek, weeklyProgressValue, getDailyTracks, getDailyVersions, dailyGoalsForDate, dailyProgressValue } from '../domain/goals.js';
-import { getAllAssessmentsForPeriod } from '../domain/longTermGoals.js';
-import { getSessionLogsForPeriod, deleteSessionLog, resolveGoalRefName } from '../domain/sessionLogs.js';
-import { store } from '../db.js';
-import { formatDateHuman, addDays, isoWeekday, WEEKDAY_LABELS } from '../domain/dates.js';
+import { el, mount, progressFigure } from "./dom.js";
+import { getClosedPeriods } from "../domain/periodLifecycle.js";
+import {
+  getWeeklyTracks,
+  getWeeklyVersions,
+  weeklyVersionForWeek,
+  weeklyProgressValue,
+  getDailyTracks,
+  getDailyVersions,
+  dailyGoalsForDate,
+  dailyProgressValue,
+} from "../domain/goals.js";
+import { getAllAssessmentsForPeriod } from "../domain/longTermGoals.js";
+import {
+  getSessionLogsForPeriod,
+  deleteSessionLog,
+  resolveGoalRefName,
+} from "../domain/sessionLogs.js";
+import { store } from "../db.js";
+import {
+  formatDateHuman,
+  addDays,
+  isoWeekday,
+  WEEKDAY_LABELS,
+} from "../domain/dates.js";
 
 export async function renderHistoryPage(container) {
   const periods = await getClosedPeriods();
-  const root = el('div');
+  const root = el("div");
 
   if (periods.length === 0) {
-    root.appendChild(el('p.empty-state', { text: 'Inga avslutade perioder ännu.' }));
+    root.appendChild(
+      el("p.empty-state", { text: "Inga avslutade perioder ännu." }),
+    );
     mount(container, root);
     return;
   }
 
-  root.appendChild(el('div.section-title', { text: 'AVSLUTADE PERIODER' }));
+  root.appendChild(el("div.section-title", { text: "AVSLUTADE PERIODER" }));
   for (const period of periods) {
     root.appendChild(
-      el('button.history-period-row', {
-        onClick: () => renderPeriodDetail(container, period),
-      }, [
-        el('div.h-dates', { text: `${formatDateHuman(period.startDate)} – ${formatDateHuman(period.endDate)}` }),
-        el('div.h-name', { text: period.periodFocus?.name || '(inget periodfokus satt)' }),
-      ])
+      el(
+        "button.history-period-row",
+        {
+          onClick: () => renderPeriodDetail(container, period),
+        },
+        [
+          el("div.h-dates", {
+            text: `${formatDateHuman(period.startDate)} – ${formatDateHuman(period.endDate)}`,
+          }),
+          el("div.h-name", {
+            text: period.periodFocus?.name || "(inget periodfokus satt)",
+          }),
+        ],
+      ),
     );
   }
 
@@ -33,18 +61,27 @@ export async function renderHistoryPage(container) {
 }
 
 async function renderPeriodDetail(container, period) {
-  const root = el('div');
+  const root = el("div");
 
   root.appendChild(
-    el('button.back-link', { text: '← Tillbaka till historik', onClick: () => renderHistoryPage(container) })
+    el("button.back-link", {
+      text: "← Tillbaka till historik",
+      onClick: () => renderHistoryPage(container),
+    }),
   );
 
   root.appendChild(
-    el('div.period-header', {}, [
-      el('div.period-week', { text: `${formatDateHuman(period.startDate)} – ${formatDateHuman(period.endDate)}` }),
-      el('h2', { text: period.periodFocus?.name || '(inget periodfokus satt)' }),
-      period.periodFocus?.description ? el('p.period-desc', { text: period.periodFocus.description }) : null,
-    ])
+    el("div.period-header", {}, [
+      el("div.period-week", {
+        text: `${formatDateHuman(period.startDate)} – ${formatDateHuman(period.endDate)}`,
+      }),
+      el("h2", {
+        text: period.periodFocus?.name || "(inget periodfokus satt)",
+      }),
+      period.periodFocus?.description
+        ? el("p.period-desc", { text: period.periodFocus.description })
+        : null,
+    ]),
   );
 
   root.appendChild(await renderDayGridSection(period));
@@ -66,10 +103,12 @@ async function renderPeriodDetail(container, period) {
  * goals — a period with none doesn't get a false "complete" border).
  */
 async function renderDayGridSection(period) {
-  const section = el('div', {}, [el('div.section-title', { text: 'DAGAR I PERIODEN' })]);
+  const section = el("div", {}, [
+    el("div.section-title", { text: "DAGAR I PERIODEN" }),
+  ]);
 
   const weeklyTracks = await getWeeklyTracks(period.id);
-  const grid = el('div.day-grid-weeks');
+  const grid = el("div.day-grid-weeks");
 
   for (let week = 1; week <= 4; week++) {
     let weekComplete = false;
@@ -86,8 +125,8 @@ async function renderDayGridSection(period) {
       weekComplete = anyApplicable && allMet;
     }
 
-    const weekRow = el('div.day-grid-week', {
-      class: weekComplete ? 'day-grid-week week-complete' : 'day-grid-week',
+    const weekRow = el("div.day-grid-week", {
+      class: weekComplete ? "day-grid-week week-complete" : "day-grid-week",
     });
 
     const weekStart = addDays(period.startDate, (week - 1) * 7);
@@ -96,18 +135,20 @@ async function renderDayGridSection(period) {
       if (date > period.endDate) break;
 
       const wd = isoWeekday(date);
-      let cellClass = 'day-cell';
+      let cellClass = "day-cell";
       if (wd === 6 || wd === 7) {
-        cellClass += ' weekend';
+        cellClass += " weekend";
       } else {
         const dayGoals = await dailyGoalsForDate(period.id, date);
         if (dayGoals.length === 0) {
-          cellClass += ' no-goals';
+          cellClass += " no-goals";
         } else if (dayGoals.every((g) => g.value >= g.version.targetValue)) {
-          cellClass += ' complete';
+          cellClass += " complete";
         }
       }
-      weekRow.appendChild(el('div', { class: cellClass, title: formatDateHuman(date) }));
+      weekRow.appendChild(
+        el("div", { class: cellClass, title: formatDateHuman(date) }),
+      );
     }
     grid.appendChild(weekRow);
   }
@@ -118,9 +159,16 @@ async function renderDayGridSection(period) {
 
 async function renderSessionLogsHistory(period, container) {
   const logs = await getSessionLogsForPeriod(period.id);
-  const section = el('div', {}, [el('div.section-title', { text: 'PASSLOGGAR' })]);
+  const section = el("div", {}, [
+    el("div.section-title", { text: "PASSLOGGAR" }),
+  ]);
   if (logs.length === 0) {
-    section.appendChild(el('p', { text: 'Inga loggar registrerade för denna period.', class: 'goal-meta' }));
+    section.appendChild(
+      el("p", {
+        text: "Inga loggar registrerade för denna period.",
+        class: "goal-meta",
+      }),
+    );
     return section;
   }
 
@@ -128,30 +176,38 @@ async function renderSessionLogsHistory(period, container) {
     const goalName = await resolveGoalRefName(log.goalRef);
     const expanded = expandedLogIds.has(log.id);
 
-    const card = el('div.goal-card', {}, [
-      el('div.goal-card-top', {
-        class: 'goal-card-top clickable',
-        onClick: () => {
-          if (expanded) expandedLogIds.delete(log.id);
-          else expandedLogIds.add(log.id);
-          renderPeriodDetail(container, period);
+    const card = el("div.goal-card", {}, [
+      el(
+        "div.goal-card-top",
+        {
+          class: "goal-card-top clickable",
+          onClick: () => {
+            if (expanded) expandedLogIds.delete(log.id);
+            else expandedLogIds.add(log.id);
+            renderPeriodDetail(container, period);
+          },
         },
-      }, [
-        el('div', {}, [
-          el('div.goal-name', { text: formatDateHuman(log.date) }),
-          el('div.goal-meta', { text: goalName || 'Inget mål kopplat' }),
-        ]),
-        el('button.goal-chevron', { text: expanded ? '▴' : '▾' }),
-      ]),
+        [
+          el("div", {}, [
+            el("div.goal-name", { text: formatDateHuman(log.date) }),
+            el("div.goal-meta", { text: goalName || "Inget mål kopplat" }),
+          ]),
+          el("button.goal-chevron", { text: expanded ? "▴" : "▾" }),
+        ],
+      ),
       expanded
-        ? el('div', { style: 'margin-top: var(--space-2)' }, [
-            el('p.goal-meta', { text: `Readiness ${log.readiness}/10 · RPE ${log.rpe}/10` }),
-            log.note ? el('p', { text: log.note, style: 'margin: 4px 0 0' }) : null,
+        ? el("div", { style: "margin-top: var(--space-2)" }, [
+            el("p.goal-meta", {
+              text: `Readiness ${log.readiness}/10 · RPE ${log.rpe}/10`,
+            }),
+            log.note
+              ? el("p", { text: log.note, style: "margin: 4px 0 0" })
+              : null,
           ])
         : null,
-      el('div.goal-card-actions', {}, [
-        el('button', {
-          text: 'Ta bort',
+      el("div.goal-card-actions", {}, [
+        el("button", {
+          text: "Ta bort",
           onClick: async (e) => {
             e.stopPropagation();
             await deleteSessionLog(log.id);
@@ -172,22 +228,31 @@ const expandedLogIds = new Set();
 
 async function renderAssessmentsHistory(period) {
   const assessments = await getAllAssessmentsForPeriod(period.id);
-  const section = el('div', {}, [el('div.section-title', { text: 'MÅLSKATTNINGAR' })]);
+  const section = el("div", {}, [
+    el("div.section-title", { text: "MÅLSKATTNINGAR" }),
+  ]);
   if (assessments.length === 0) {
-    section.appendChild(el('p', { text: 'Inga skattningar registrerade för denna period.', class: 'goal-meta' }));
+    section.appendChild(
+      el("p", {
+        text: "Inga skattningar registrerade för denna period.",
+        class: "goal-meta",
+      }),
+    );
     return section;
   }
-  const ledger = el('div.ledger');
+  const ledger = el("div.ledger");
   for (const a of assessments) {
-    const goal = await store.get('longTermGoals', a.goalId);
+    const goal = await store.get("longTermGoals", a.goalId);
     ledger.appendChild(
-      el('div.ledger-row', {}, [
-        el('div.name', {}, [
-          el('span.goal-name', { text: goal ? goal.name : '(borttaget mål)' }),
-          a.note ? el('span.goal-meta', { text: a.note }) : null,
+      el("div.ledger-row", {}, [
+        el("div.name", {}, [
+          el("span.goal-name", { text: goal ? goal.name : "(borttaget mål)" }),
+          a.note ? el("span.goal-meta", { text: a.note }) : null,
         ]),
-        el('span.progress-figure', {}, [el('span.done.num', { text: `${a.score}/10` })]),
-      ])
+        el("span.progress-figure", {}, [
+          el("span.done.num", { text: `${a.score}/10` }),
+        ]),
+      ]),
     );
   }
   section.appendChild(ledger);
@@ -196,29 +261,37 @@ async function renderAssessmentsHistory(period) {
 
 async function renderWeeklyHistory(period) {
   const tracks = await getWeeklyTracks(period.id);
-  const section = el('div', {}, [el('div.section-title', { text: 'VECKOMÅL — HELA PERIODEN' })]);
+  const section = el("div", {}, [
+    el("div.section-title", { text: "VECKOMÅL — HELA PERIODEN" }),
+  ]);
   if (tracks.length === 0) {
-    section.appendChild(el('p', { text: 'Inga veckomål registrerade.', class: 'goal-meta' }));
+    section.appendChild(
+      el("p", { text: "Inga veckomål registrerade.", class: "goal-meta" }),
+    );
     return section;
   }
 
   for (const track of tracks) {
     const versions = await getWeeklyVersions(track.id);
-    const block = el('div', { style: 'margin-bottom: 20px' });
+    const block = el("div", { style: "margin-bottom: 20px" });
     const firstVersion = versions[0];
-    block.appendChild(el('div.goal-name', { text: firstVersion?.name || '(mål)' }));
+    block.appendChild(
+      el("div.goal-name", { text: firstVersion?.name || "(mål)" }),
+    );
 
-    const ledger = el('div.ledger');
+    const ledger = el("div.ledger");
     for (let week = 1; week <= 4; week++) {
       const applicable = versions.filter((v) => v.effectiveFromWeek <= week);
-      const version = applicable.length ? applicable[applicable.length - 1] : null;
+      const version = applicable.length
+        ? applicable[applicable.length - 1]
+        : null;
       if (!version) continue;
       const value = await weeklyProgressValue(track.id, week);
       ledger.appendChild(
-        el('div.ledger-row', {}, [
-          el('div.name', { text: `Vecka ${week}` }),
+        el("div.ledger-row", {}, [
+          el("div.name", { text: `Vecka ${week}` }),
           progressFigure(value, version.targetValue, version.unit),
-        ])
+        ]),
       );
     }
     block.appendChild(ledger);
@@ -229,13 +302,17 @@ async function renderWeeklyHistory(period) {
 
 async function renderDailyHistory(period) {
   const tracks = await getDailyTracks(period.id);
-  const section = el('div', {}, [el('div.section-title', { text: 'DAGLIGA MÅL — SAMMANFATTNING' })]);
+  const section = el("div", {}, [
+    el("div.section-title", { text: "DAGLIGA MÅL — SAMMANFATTNING" }),
+  ]);
   if (tracks.length === 0) {
-    section.appendChild(el('p', { text: 'Inga dagliga mål registrerade.', class: 'goal-meta' }));
+    section.appendChild(
+      el("p", { text: "Inga dagliga mål registrerade.", class: "goal-meta" }),
+    );
     return section;
   }
 
-  const ledger = el('div.ledger');
+  const ledger = el("div.ledger");
   for (const track of tracks) {
     const versions = await getDailyVersions(track.id);
     const latest = versions[versions.length - 1];
@@ -246,7 +323,9 @@ async function renderDailyHistory(period) {
     for (let i = 0; i < 28; i++) {
       const date = addDays(period.startDate, i);
       const applicable = versions.filter((v) => v.effectiveFromDate <= date);
-      const version = applicable.length ? applicable[applicable.length - 1] : null;
+      const version = applicable.length
+        ? applicable[applicable.length - 1]
+        : null;
       if (!version) continue;
       const isoWd = isoWeekday(date);
       if (!version.weekdays.includes(isoWd)) continue;
@@ -256,17 +335,19 @@ async function renderDailyHistory(period) {
     }
 
     ledger.appendChild(
-      el('div.ledger-row', {}, [
-        el('div.name', {}, [
-          el('span.goal-name', { text: latest.name }),
-          el('span.goal-meta', { text: latest.weekdays.map((d) => WEEKDAY_LABELS[d]).join(', ') }),
+      el("div.ledger-row", {}, [
+        el("div.name", {}, [
+          el("span.goal-name", { text: latest.name }),
+          el("span.goal-meta", {
+            text: latest.weekdays.map((d) => WEEKDAY_LABELS[d]).join(", "),
+          }),
         ]),
-        el('span.progress-figure', {}, [
-          el('span.done.num', { text: String(metCount) }),
-          el('span.slash.num', { text: '/' }),
-          el('span.target.num', { text: `${totalCount} dagar` }),
+        el("span.progress-figure", {}, [
+          el("span.done.num", { text: String(metCount) }),
+          el("span.slash.num", { text: "/" }),
+          el("span.target.num", { text: `${totalCount} dagar` }),
         ]),
-      ])
+      ]),
     );
   }
   section.appendChild(ledger);

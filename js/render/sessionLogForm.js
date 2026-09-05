@@ -1,13 +1,19 @@
 // sessionLogForm.js
-import { el, openModal, toast } from './dom.js';
-import { addSessionLog, getGoalRefOptions } from '../domain/sessionLogs.js';
+import { el, openModal, toast } from "./dom.js";
+import { addSessionLog, getGoalRefOptions } from "../domain/sessionLogs.js";
 
 /**
  * Opens the "log a session" modal. The goal is entirely optional: the
  * dropdown always has a "no goal" option selected by default, and saving
  * with it selected stores goalRef: null.
  */
-export async function openSessionLogForm({ periodId, dateStr, minDate, maxDate, onSaved }) {
+export async function openSessionLogForm({
+  periodId,
+  dateStr,
+  minDate,
+  maxDate,
+  onSaved,
+}) {
   const goalOptions = await getGoalRefOptions(periodId);
 
   openModal((close) => {
@@ -18,16 +24,12 @@ export async function openSessionLogForm({ periodId, dateStr, minDate, maxDate, 
       min: minDate || undefined,
       max: maxDate || undefined,
     });
-    const goalSelect = el(
-      "select",
-      {},
-      [
-        el("option", { text: "— Inget specifikt mål —", value: NO_GOAL }),
-        ...goalOptions.map((opt) =>
-          el("option", { text: opt.label, value: `${opt.kind}:${opt.id}` }),
-        ),
-      ],
-    );
+    const goalSelect = el("select", {}, [
+      el("option", { text: "— Inget specifikt mål —", value: NO_GOAL }),
+      ...goalOptions.map((opt) =>
+        el("option", { text: opt.label, value: `${opt.kind}:${opt.id}` }),
+      ),
+    ]);
 
     const readinessInput = el("input", {
       type: "range",
@@ -60,7 +62,10 @@ export async function openSessionLogForm({ periodId, dateStr, minDate, maxDate, 
     const form = el("div", {}, [
       el("h2", { text: "Ny logg" }),
       el("div.field", {}, [el("label", { text: "Datum" }), dateInput]),
-      el("div.field", {}, [el("label", { text: "Mål (valfritt)" }), goalSelect]),
+      el("div.field", {}, [
+        el("label", { text: "Mål (valfritt)" }),
+        goalSelect,
+      ]),
       el("div.field-row", {}, [
         el("div.field", {}, [
           el("label", { text: "Readiness" }),
@@ -82,7 +87,10 @@ export async function openSessionLogForm({ periodId, dateStr, minDate, maxDate, 
             const goalRef =
               raw === NO_GOAL
                 ? null
-                : { kind: raw.split(":")[0], id: raw.split(":").slice(1).join(":") };
+                : {
+                    kind: raw.split(":")[0],
+                    id: raw.split(":").slice(1).join(":"),
+                  };
             const pickedDate = dateInput.value || dateStr;
             await addSessionLog(periodId, pickedDate, {
               goalRef,

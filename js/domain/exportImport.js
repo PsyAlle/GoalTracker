@@ -8,7 +8,7 @@
 // device or recovering from a backup), so the caller must confirm with the
 // user before invoking it.
 
-import { store, ALL_STORES } from '../db.js';
+import { store, ALL_STORES } from "../db.js";
 
 export const SCHEMA_VERSION = 1;
 
@@ -25,9 +25,11 @@ export async function exportAllData() {
 }
 
 export function downloadExport(exportObject) {
-  const blob = new Blob([JSON.stringify(exportObject, null, 2)], { type: 'application/json' });
+  const blob = new Blob([JSON.stringify(exportObject, null, 2)], {
+    type: "application/json",
+  });
   const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
+  const a = document.createElement("a");
   const stamp = exportObject.exportedAt.slice(0, 10);
   a.href = url;
   a.download = `loggboken-backup-${stamp}.json`;
@@ -42,11 +44,13 @@ export function downloadExport(exportObject) {
  * export object. Throws if the file doesn't look like a valid export.
  */
 export async function importAllData(parsed) {
-  if (!parsed || typeof parsed !== 'object' || !parsed.data) {
-    throw new Error('Filen ser inte ut som en giltig backup.');
+  if (!parsed || typeof parsed !== "object" || !parsed.data) {
+    throw new Error("Filen ser inte ut som en giltig backup.");
   }
   if (parsed.schemaVersion !== SCHEMA_VERSION) {
-    throw new Error(`Backupen har en okänd version (${parsed.schemaVersion}). Kan inte importera.`);
+    throw new Error(
+      `Backupen har en okänd version (${parsed.schemaVersion}). Kan inte importera.`,
+    );
   }
   for (const name of ALL_STORES) {
     await store.clear(name);
@@ -70,7 +74,7 @@ export function readFileAsJson(file) {
       try {
         resolve(JSON.parse(reader.result));
       } catch (err) {
-        reject(new Error('Filen kunde inte tolkas som JSON.'));
+        reject(new Error("Filen kunde inte tolkas som JSON."));
       }
     };
     reader.onerror = () => reject(reader.error);

@@ -83,6 +83,35 @@ export function openModal(contentBuilder) {
   return close;
 }
 
+/**
+ * Bottom-sheet confirmation for destructive actions (e.g. deleting a goal).
+ * onConfirm is only called if the user taps the confirm button; cancel/
+ * backdrop-tap dismisses without side effects.
+ */
+export function confirmModal({
+  title,
+  message,
+  confirmText = "Ta bort",
+  onConfirm,
+}) {
+  openModal((close) => {
+    return el("div", {}, [
+      el("h2", { text: title }),
+      el("p", { text: message }),
+      el("div.modal-actions", {}, [
+        el("button.btn.danger.block", {
+          text: confirmText,
+          onClick: async () => {
+            close();
+            await onConfirm();
+          },
+        }),
+        el("button.btn.block", { text: "Avbryt", onClick: close }),
+      ]),
+    ]);
+  });
+}
+
 /** A +/- stepper. onChange(delta) is called with +1 or -1. */
 export function stepper(onChange, { disableMinus = false } = {}) {
   return el("div.stepper", {}, [
