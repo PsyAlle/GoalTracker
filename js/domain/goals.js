@@ -20,7 +20,14 @@ export async function getWeeklyTracks(periodId) {
 
 export async function getWeeklyVersions(trackId) {
   const versions = await store.byIndex('weeklyGoalVersions', 'trackId', trackId);
-  return versions.sort((a, b) => a.effectiveFromWeek - b.effectiveFromWeek);
+  // IndexedDB returns rows in primary-key (random UUID) order, not creation
+  // order, so two versions sharing the same effectiveFromWeek (e.g. editing
+  // the same goal twice in one sitting) need createdAt as a tie-breaker —
+  // otherwise "latest version" (versions[versions.length - 1]) could
+  // unpredictably pick the older edit instead of the newer one.
+  return versions.sort(
+    (a, b) => a.effectiveFromWeek - b.effectiveFromWeek || a.createdAt - b.createdAt,
+  );
 }
 
 /** The version of a weekly goal that was/is effective for a given week number (1-4). */
@@ -101,7 +108,15 @@ export async function getDailyTracks(periodId) {
 
 export async function getDailyVersions(trackId) {
   const versions = await store.byIndex('dailyGoalVersions', 'trackId', trackId);
-  return versions.sort((a, b) => (a.effectiveFromDate < b.effectiveFromDate ? -1 : 1));
+  // Same fix as getWeeklyVersions: IndexedDB row order isn't creation order,
+  // and the old comparator never returned 0 for equal dates (breaking sort
+  // stability), so two edits made on the same day could end up in the wrong
+  // order and hide the newer one. Compare dates properly, then createdAt.
+  return versions.sort((a, b) => {
+    if (a.effectiveFromDate < b.effectiveFromDate) return -1;
+    if (a.effectiveFromDate > b.effectiveFromDate) return 1;
+    return a.createdAt - b.createdAt;
+  });
 }
 
 /** The version of a daily goal effective on a given date (YYYY-MM-DD). */

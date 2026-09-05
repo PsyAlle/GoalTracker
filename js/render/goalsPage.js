@@ -1,5 +1,5 @@
 // goalsPage.js
-import { el, mount, toast } from "./dom.js";
+import { el, mount, toast, confirmModal } from "./dom.js";
 import { getCurrentPeriod } from "../domain/periodLifecycle.js";
 import {
   getWeeklyTracks,
@@ -182,11 +182,16 @@ async function renderWeeklySection(period, currentWeek) {
           }),
           el("button", {
             text: "Ta bort",
-            onClick: async () => {
-              await removeWeeklyGoal(track.id);
-              toast("Veckomål borttaget.");
-              refreshPage();
-            },
+            onClick: () =>
+              confirmModal({
+                title: "Ta bort veckomål?",
+                message: `"${latest.name}" och all registrerad progress för målet raderas permanent. Det går inte att ångra.`,
+                onConfirm: async () => {
+                  await removeWeeklyGoal(track.id);
+                  toast("Veckomål borttaget.");
+                  refreshPage();
+                },
+              }),
           }),
         ]),
       ]),
@@ -248,11 +253,16 @@ async function renderDailySection(period, todayDate) {
           }),
           el("button", {
             text: "Ta bort",
-            onClick: async () => {
-              await removeDailyGoal(track.id);
-              toast("Dagligt mål borttaget.");
-              refreshPage();
-            },
+            onClick: () =>
+              confirmModal({
+                title: "Ta bort dagligt mål?",
+                message: `"${latest.name}" och all registrerad progress för målet raderas permanent. Det går inte att ångra.`,
+                onConfirm: async () => {
+                  await removeDailyGoal(track.id);
+                  toast("Dagligt mål borttaget.");
+                  refreshPage();
+                },
+              }),
           }),
         ]),
       ]),

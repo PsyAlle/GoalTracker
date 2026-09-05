@@ -147,21 +147,11 @@
      Section / ledger rows
      ========================================================================== */
   .section-title {
-    display: flex;
-    align-items: center;
-    gap: var(--space-3);
     font-size: 0.85rem;
-    font-weight: 700;
-    letter-spacing: 0.08em;
-    color: var(--moss);
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    color: var(--ink);
     margin: var(--space-6) 0 var(--space-2);
-  }
-
-  .section-title::after {
-    content: "";
-    flex: 1;
-    height: 1px;
-    background: var(--hairline);
   }
   
   .section-title:first-child {
@@ -192,8 +182,6 @@
   
   .goal-name {
     text-transform: uppercase;
-    font-size: 0.9rem;
-    letter-spacing: 0.02em;
   }
   
   .ledger-row .name .goal-name {
@@ -538,8 +526,6 @@
   .field input[type='text'],
   .field input[type='number'],
   .field input[type='url'],
-  .field input[type='date'],
-  .field select,
   .field textarea {
     width: 100%;
     padding: var(--space-2) var(--space-3);
@@ -606,11 +592,9 @@
   }
   
   .slider-block input[type='range'] {
-       width: 100%;
-     }
-     input[type='range'] {
-     accent-color: var(--moss);
-     }
+    width: 100%;
+    accent-color: var(--moss);
+  }
   
   .slider-block .score-readout {
     font-family: var(--font-mono);
@@ -769,11 +753,58 @@
     cursor: pointer;
     text-decoration: underline;
   }
+
+  .goal-card-top.clickable {
+    cursor: pointer;
+  }
+
+  /* ==========================================================================
+     Day grid (history) — one row per week, one cell per calendar day.
+     Green = every applicable daily goal met that day. Dashed = weekend or no
+     daily goals that day. Plain hairline = at least one goal missed.
+     A moss border around a week's row means every weekly goal for that week
+     was fully met.
+     ========================================================================== */
+  .day-grid-weeks {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+  }
+
+  .day-grid-week {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    gap: 4px;
+    padding: 4px;
+    border-radius: var(--radius);
+    border: 2px solid transparent;
+  }
+
+  .day-grid-week.week-complete {
+    border-color: var(--moss);
+  }
+
+  .day-cell {
+    aspect-ratio: 1;
+    border-radius: 4px;
+    background: var(--hairline);
+  }
+
+  .day-cell.complete {
+    background: var(--moss);
+  }
+
+  .day-cell.weekend,
+  .day-cell.no-goals {
+    background: transparent;
+    border: 1px dashed var(--hairline);
+  }
   
   .planning-banner {
     background: var(--moss-wash);
     border: 1px solid var(--moss-dim);
     border-radius: var(--radius);
+
     padding: var(--space-4);
     margin-bottom: var(--space-5);
     font-size: 0.88rem;

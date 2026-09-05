@@ -1,7 +1,7 @@
 // history.js
 import { el, mount, progressFigure } from './dom.js';
 import { getClosedPeriods } from '../domain/periodLifecycle.js';
-import { getWeeklyTracks, getWeeklyVersions, weeklyProgressValue, getDailyTracks, getDailyVersions, dailyProgressValue } from '../domain/goals.js';
+import { getWeeklyTracks, getWeeklyVersions, weeklyVersionForWeek, weeklyProgressValue, getDailyTracks, getDailyVersions, dailyGoalsForDate, dailyProgressValue } from '../domain/goals.js';
 import { getAllAssessmentsForPeriod } from '../domain/longTermGoals.js';
 import { getSessionLogsForPeriod, deleteSessionLog, resolveGoalRefName } from '../domain/sessionLogs.js';
 import { store } from '../db.js';
@@ -47,12 +47,73 @@ async function renderPeriodDetail(container, period) {
     ])
   );
 
+  root.appendChild(await renderDayGridSection(period));
   root.appendChild(await renderAssessmentsHistory(period));
   root.appendChild(await renderWeeklyHistory(period));
   root.appendChild(await renderDailyHistory(period));
   root.appendChild(await renderSessionLogsHistory(period, container));
 
   mount(container, root);
+}
+
+/**
+ * A 7-column grid, one row per week (4 rows / up to 28 cells), showing:
+ *  - green cell: every applicable daily goal was met that day
+ *  - empty/hairline cell: at least one applicable daily goal was missed
+ *  - dashed/neutral cell: weekend, or no daily goals applied that day
+ * Each week's row gets a moss-colored border if every weekly goal for that
+ * week was fully met (only decorated when the period actually had weekly
+ * goals — a period with none doesn't get a false "complete" border).
+ */
+async function renderDayGridSection(period) {
+  const section = el('div', {}, [el('div.section-title', { text: 'DAGAR I PERIODEN' })]);
+
+  const weeklyTracks = await getWeeklyTracks(period.id);
+  const grid = el('div.day-grid-weeks');
+
+  for (let week = 1; week <= 4; week++) {
+    let weekComplete = false;
+    if (weeklyTracks.length > 0) {
+      let anyApplicable = false;
+      let allMet = true;
+      for (const track of weeklyTracks) {
+        const version = await weeklyVersionForWeek(track.id, week);
+        if (!version) continue;
+        anyApplicable = true;
+        const value = await weeklyProgressValue(track.id, week);
+        if (value < version.targetValue) allMet = false;
+      }
+      weekComplete = anyApplicable && allMet;
+    }
+
+    const weekRow = el('div.day-grid-week', {
+      class: weekComplete ? 'day-grid-week week-complete' : 'day-grid-week',
+    });
+
+    const weekStart = addDays(period.startDate, (week - 1) * 7);
+    for (let i = 0; i < 7; i++) {
+      const date = addDays(weekStart, i);
+      if (date > period.endDate) break;
+
+      const wd = isoWeekday(date);
+      let cellClass = 'day-cell';
+      if (wd === 6 || wd === 7) {
+        cellClass += ' weekend';
+      } else {
+        const dayGoals = await dailyGoalsForDate(period.id, date);
+        if (dayGoals.length === 0) {
+          cellClass += ' no-goals';
+        } else if (dayGoals.every((g) => g.value >= g.version.targetValue)) {
+          cellClass += ' complete';
+        }
+      }
+      weekRow.appendChild(el('div', { class: cellClass, title: formatDateHuman(date) }));
+    }
+    grid.appendChild(weekRow);
+  }
+
+  section.appendChild(grid);
+  return section;
 }
 
 async function renderSessionLogsHistory(period, container) {
@@ -63,36 +124,51 @@ async function renderSessionLogsHistory(period, container) {
     return section;
   }
 
-  const ledger = el('div.ledger');
   for (const log of logs) {
     const goalName = await resolveGoalRefName(log.goalRef);
-    ledger.appendChild(
-      el('div.ledger-row', {}, [
-        el('div.name', {}, [
-          el('span.goal-name', { text: formatDateHuman(log.date) }),
-          el('span.goal-meta', {
-            text: [
-              goalName ? goalName : 'Inget mål kopplat',
-              `Readiness ${log.readiness}/10`,
-              `RPE ${log.rpe}/10`,
-              log.note || null,
-            ]
-              .filter(Boolean)
-              .join(' · '),
-          }),
+    const expanded = expandedLogIds.has(log.id);
+
+    const card = el('div.goal-card', {}, [
+      el('div.goal-card-top', {
+        class: 'goal-card-top clickable',
+        onClick: () => {
+          if (expanded) expandedLogIds.delete(log.id);
+          else expandedLogIds.add(log.id);
+          renderPeriodDetail(container, period);
+        },
+      }, [
+        el('div', {}, [
+          el('div.goal-name', { text: formatDateHuman(log.date) }),
+          el('div.goal-meta', { text: goalName || 'Inget mål kopplat' }),
         ]),
-        el('button.btn.text', {
+        el('button.goal-chevron', { text: expanded ? '▴' : '▾' }),
+      ]),
+      expanded
+        ? el('div', { style: 'margin-top: var(--space-2)' }, [
+            el('p.goal-meta', { text: `Readiness ${log.readiness}/10 · RPE ${log.rpe}/10` }),
+            log.note ? el('p', { text: log.note, style: 'margin: 4px 0 0' }) : null,
+          ])
+        : null,
+      el('div.goal-card-actions', {}, [
+        el('button', {
           text: 'Ta bort',
-          onClick: async () => {
+          onClick: async (e) => {
+            e.stopPropagation();
             await deleteSessionLog(log.id);
             renderPeriodDetail(container, period);
           },
         }),
-      ])
-    );
+      ]),
+    ]);
+    section.appendChild(card);
   }
   return section;
 }
+
+// Tracks which session-log cards have been manually expanded, keyed by log
+// id. Module-level so it survives the full re-render that follows every
+// expand/collapse/delete in this view.
+const expandedLogIds = new Set();
 
 async function renderAssessmentsHistory(period) {
   const assessments = await getAllAssessmentsForPeriod(period.id);
@@ -159,6 +235,7 @@ async function renderDailyHistory(period) {
     return section;
   }
 
+  const ledger = el('div.ledger');
   for (const track of tracks) {
     const versions = await getDailyVersions(track.id);
     const latest = versions[versions.length - 1];
@@ -178,7 +255,7 @@ async function renderDailyHistory(period) {
       if (value >= version.targetValue) metCount++;
     }
 
-    section.appendChild(
+    ledger.appendChild(
       el('div.ledger-row', {}, [
         el('div.name', {}, [
           el('span.goal-name', { text: latest.name }),
