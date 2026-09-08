@@ -3,7 +3,7 @@
 // Bump CACHE_VERSION whenever any precached file changes, so returning
 // users pick up the new version instead of a stale cached one.
 
-const CACHE_VERSION = "loggboken-v14";
+const CACHE_VERSION = "loggboken-v15";
 
 const PRECACHE_URLS = [
   "./",
