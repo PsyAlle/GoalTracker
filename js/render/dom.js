@@ -240,6 +240,32 @@ export function goalBoxRow({
 }
 
 /**
+ * A collapsible header/body row: tapping the header toggles the body below
+ * it. Purely presentational — the caller owns the expanded/collapsed state
+ * (a module-level Set keyed however makes sense for that view, same pattern
+ * as expandedGoalIds above) and re-renders after toggling, matching this
+ * app's "clear + rebuild" render model. Wrap one or more accordionRow()
+ * calls in a `div.accordion-list` for the shared card border.
+ */
+export function accordionRow({ title, complete = false, expanded, onToggle, body }) {
+  const header = el("div.accordion-header", { onClick: onToggle }, [
+    el("div.accordion-header-title", {}, [
+      complete ? el("span.goal-check", { text: "✓" }) : null,
+      el("span.goal-name", {
+        text: title,
+        class: complete ? "goal-name complete" : "goal-name",
+      }),
+    ]),
+    el("span.goal-chevron", { text: expanded ? "▴" : "▾" }),
+  ]);
+  const item = el("div.accordion-item", {}, [header]);
+  if (expanded) {
+    item.appendChild(el("div.accordion-body", {}, [body]));
+  }
+  return item;
+}
+
+/**
  * A simple repeatable "links" editor: array of {label, url} objects, with
  * add/remove controls. Mutates the passed array in place and calls onChange
  * after every mutation so the caller can persist it.
