@@ -1,6 +1,9 @@
 // history.js
 import { el, mount, progressFigure } from "./dom.js";
-import { getClosedPeriods } from "../domain/periodLifecycle.js";
+import {
+  getClosedPeriods,
+  getCurrentPeriod,
+} from "../domain/periodLifecycle.js";
 import {
   getWeeklyTracks,
   getWeeklyVersions,
@@ -19,6 +22,7 @@ import {
 } from "../domain/sessionLogs.js";
 import { store } from "../db.js";
 import {
+  todayStr,
   formatDateHuman,
   addDays,
   isoWeekday,
@@ -26,35 +30,74 @@ import {
 } from "../domain/dates.js";
 
 export async function renderHistoryPage(container) {
+  const currentPeriod = await getCurrentPeriod();
+  const isActive = currentPeriod && currentPeriod.status === "active";
+  const isPending = currentPeriod && currentPeriod.status === "planning";
   const periods = await getClosedPeriods();
+
   const root = el("div");
 
-  if (periods.length === 0) {
-    root.appendChild(
-      el("p.empty-state", { text: "Inga avslutade perioder ännu." }),
-    );
+  if (!isActive && !isPending && periods.length === 0) {
+    root.appendChild(el("p.empty-state", { text: "Inga perioder ännu." }));
     mount(container, root);
     return;
   }
 
-  root.appendChild(el("div.section-title", { text: "AVSLUTADE PERIODER" }));
-  for (const period of periods) {
+  if (isActive) {
+    root.appendChild(el("div.section-title", { text: "PÅGÅENDE PERIOD" }));
     root.appendChild(
-      el(
-        "button.history-period-row",
-        {
-          onClick: () => renderPeriodDetail(container, period),
-        },
-        [
-          el("div.h-dates", {
-            text: `${formatDateHuman(period.startDate)} – ${formatDateHuman(period.endDate)}`,
-          }),
-          el("div.h-name", {
-            text: period.periodFocus?.name || "(inget periodfokus satt)",
-          }),
-        ],
+      await renderPeriodBody(currentPeriod, {
+        endCapDate: todayStr(),
+        refresh: () => renderHistoryPage(container),
+      }),
+    );
+  } else if (isPending) {
+    // Deload-vecka: the period hasn't officially started (startDate/endDate
+    // are still null, so the day grid and week-bucketed sections can't be
+    // computed yet). Session logs are date-keyed, not week-keyed, so they
+    // can already be shown here even though they're "standalone" and won't
+    // count toward week 1 once the period activates.
+    root.appendChild(
+      el("div.section-title", { text: "DELOAD-VECKA — LOGGAT HITTILLS" }),
+    );
+    root.appendChild(
+      el("p", {
+        text: `Nästa period startar ${formatDateHuman(currentPeriod.planningEndDate)}. Det som loggas nu räknas fristående och ingår inte i period 1:s veckor.`,
+        class: "goal-meta",
+        style: "margin-bottom: var(--space-4)",
+      }),
+    );
+    root.appendChild(
+      await renderSessionLogsHistory(currentPeriod, () =>
+        renderHistoryPage(container),
       ),
     );
+  }
+
+  root.appendChild(el("div.section-title", { text: "AVSLUTADE PERIODER" }));
+  if (periods.length === 0) {
+    root.appendChild(
+      el("p", { text: "Inga avslutade perioder ännu.", class: "goal-meta" }),
+    );
+  } else {
+    for (const period of periods) {
+      root.appendChild(
+        el(
+          "button.history-period-row",
+          {
+            onClick: () => renderPeriodDetail(container, period),
+          },
+          [
+            el("div.h-dates", {
+              text: `${formatDateHuman(period.startDate)} – ${formatDateHuman(period.endDate)}`,
+            }),
+            el("div.h-name", {
+              text: period.periodFocus?.name || "(inget periodfokus satt)",
+            }),
+          ],
+        ),
+      );
+    }
   }
 
   mount(container, root);
@@ -71,6 +114,27 @@ async function renderPeriodDetail(container, period) {
   );
 
   root.appendChild(
+    await renderPeriodBody(period, {
+      endCapDate: period.endDate,
+      refresh: () => renderPeriodDetail(container, period),
+    }),
+  );
+
+  mount(container, root);
+}
+
+/**
+ * Shared body used both for a closed period's detail view and for the
+ * currently-active period shown inline at the top of the history page:
+ * header, day grid, assessments, weekly/daily summaries, session logs.
+ * `endCapDate` bounds the day grid and daily summary so an in-progress
+ * period doesn't count its not-yet-happened days as "missed" — for closed
+ * periods this is simply period.endDate (every day already happened).
+ */
+async function renderPeriodBody(period, { endCapDate, refresh }) {
+  const body = el("div");
+
+  body.appendChild(
     el("div.period-header", {}, [
       el("div.period-week", {
         text: `${formatDateHuman(period.startDate)} – ${formatDateHuman(period.endDate)}`,
@@ -84,13 +148,13 @@ async function renderPeriodDetail(container, period) {
     ]),
   );
 
-  root.appendChild(await renderDayGridSection(period));
-  root.appendChild(await renderAssessmentsHistory(period));
-  root.appendChild(await renderWeeklyHistory(period));
-  root.appendChild(await renderDailyHistory(period));
-  root.appendChild(await renderSessionLogsHistory(period, container));
+  body.appendChild(await renderDayGridSection(period, endCapDate));
+  body.appendChild(await renderAssessmentsHistory(period));
+  body.appendChild(await renderWeeklyHistory(period));
+  body.appendChild(await renderDailyHistory(period, endCapDate));
+  body.appendChild(await renderSessionLogsHistory(period, refresh));
 
-  mount(container, root);
+  return body;
 }
 
 /**
@@ -98,11 +162,13 @@ async function renderPeriodDetail(container, period) {
  *  - green cell: every applicable daily goal was met that day
  *  - empty/hairline cell: at least one applicable daily goal was missed
  *  - dashed/neutral cell: weekend, or no daily goals applied that day
+ *  - blank/transparent cell: day hasn't happened yet (only relevant for the
+ *    currently-active period, capped at `endCapDate`)
  * Each week's row gets a moss-colored border if every weekly goal for that
  * week was fully met (only decorated when the period actually had weekly
  * goals — a period with none doesn't get a false "complete" border).
  */
-async function renderDayGridSection(period) {
+async function renderDayGridSection(period, endCapDate) {
   const section = el("div", {}, [
     el("div.section-title", { text: "DAGAR I PERIODEN" }),
   ]);
@@ -134,16 +200,20 @@ async function renderDayGridSection(period) {
       const date = addDays(weekStart, i);
       if (date > period.endDate) break;
 
-      const wd = isoWeekday(date);
       let cellClass = "day-cell";
-      if (wd === 6 || wd === 7) {
-        cellClass += " weekend";
+      if (date > endCapDate) {
+        cellClass += " future";
       } else {
-        const dayGoals = await dailyGoalsForDate(period.id, date);
-        if (dayGoals.length === 0) {
-          cellClass += " no-goals";
-        } else if (dayGoals.every((g) => g.value >= g.version.targetValue)) {
-          cellClass += " complete";
+        const wd = isoWeekday(date);
+        if (wd === 6 || wd === 7) {
+          cellClass += " weekend";
+        } else {
+          const dayGoals = await dailyGoalsForDate(period.id, date);
+          if (dayGoals.length === 0) {
+            cellClass += " no-goals";
+          } else if (dayGoals.every((g) => g.value >= g.version.targetValue)) {
+            cellClass += " complete";
+          }
         }
       }
       weekRow.appendChild(
@@ -157,7 +227,7 @@ async function renderDayGridSection(period) {
   return section;
 }
 
-async function renderSessionLogsHistory(period, container) {
+async function renderSessionLogsHistory(period, refresh) {
   const logs = await getSessionLogsForPeriod(period.id);
   const section = el("div", {}, [
     el("div.section-title", { text: "PASSLOGGAR" }),
@@ -184,7 +254,7 @@ async function renderSessionLogsHistory(period, container) {
           onClick: () => {
             if (expanded) expandedLogIds.delete(log.id);
             else expandedLogIds.add(log.id);
-            renderPeriodDetail(container, period);
+            refresh();
           },
         },
         [
@@ -211,7 +281,7 @@ async function renderSessionLogsHistory(period, container) {
           onClick: async (e) => {
             e.stopPropagation();
             await deleteSessionLog(log.id);
-            renderPeriodDetail(container, period);
+            refresh();
           },
         }),
       ]),
@@ -300,7 +370,7 @@ async function renderWeeklyHistory(period) {
   return section;
 }
 
-async function renderDailyHistory(period) {
+async function renderDailyHistory(period, endCapDate) {
   const tracks = await getDailyTracks(period.id);
   const section = el("div", {}, [
     el("div.section-title", { text: "DAGLIGA MÅL — SAMMANFATTNING" }),
@@ -322,6 +392,7 @@ async function renderDailyHistory(period) {
     let totalCount = 0;
     for (let i = 0; i < 28; i++) {
       const date = addDays(period.startDate, i);
+      if (date > endCapDate) break;
       const applicable = versions.filter((v) => v.effectiveFromDate <= date);
       const version = applicable.length
         ? applicable[applicable.length - 1]

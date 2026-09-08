@@ -50,6 +50,19 @@ export function isWeekend(dateStr) {
 }
 
 /**
+ * The Monday on or after `dateStr` (ceiling to the next calendar week
+ * boundary, or the same day if it's already a Monday). Used to align a
+ * period's start to real calendar weeks by rounding FORWARD only, so a
+ * period's actual start is never earlier than planned — only possibly a
+ * few days later than the original target.
+ */
+export function nextMonday(dateStr) {
+  const wd = isoWeekday(dateStr); // 1 = Monday ... 7 = Sunday
+  if (wd === 1) return dateStr;
+  return addDays(dateStr, 8 - wd);
+}
+
+/**
  * Given a period's active start date, returns which week number (1-4) a
  * given date falls in, or null if outside the active range.
  */

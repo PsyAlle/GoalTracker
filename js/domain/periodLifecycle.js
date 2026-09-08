@@ -1,31 +1,37 @@
 // periodLifecycle.js
 // Owns the Period state machine:
 //
-//   (created)  -- planning (7d default, extendable) --> active (28d, logged)
-//                                                            |
-//                                                            v
-//                                              closed  +  next period auto-created (planning)
+//   (created)  -- Deload-vecka (7d default, extendable) --> active (28d, logged)
+//                                                                |
+//                                                                v
+//                                              closed  +  next period auto-created (Deload-vecka)
 //
 // Design notes agreed with the user:
 // - The very FIRST period ever has no predecessor to transition from, so the
 //   user creates and starts it manually from an empty state.
-// - Every subsequent period is created automatically, in 'planning' status,
-//   the moment the previous active period's 28 days elapse.
-// - A period in 'planning' flips to 'active' automatically after its
-//   planning window (default 7 days) elapses, unless the user extended it.
-// - There is deliberately no "start now" shortcut out of planning — only
-//   "extend planning by N days" — per the user's decision.
+// - Every subsequent period is created automatically, in Deload-vecka
+//   status, the moment the previous active period's 28 days elapse.
+// - A period in Deload-vecka flips to 'active' automatically once
+//   planningEndDate arrives, unless the user extended it.
+// - Active periods always run Monday-Sunday (exactly 4 calendar weeks), so
+//   weekly goals align to real calendar weeks instead of a rolling window.
+//   To achieve this, `planningEndDate` is ALWAYS kept Monday-aligned at the
+//   moment it's set (default duration, manual extension, or the first
+//   period's manual start) rather than adjusted later at the transition —
+//   this is what avoids the Deload-vecka silently ballooning by up to 6
+//   extra days on every single cycle (see nextMonday() in dates.js).
 
 import { store, newId } from "../db.js";
-import { todayStr, addDays } from "./dates.js";
+import { todayStr, addDays, isoWeekday, nextMonday } from "./dates.js";
 
 export const ACTIVE_DURATION_DAYS = 28;
 export const DEFAULT_PLANNING_DURATION_DAYS = 7;
 
 /**
  * Creates the very first period (empty state). Status starts as 'planning'
- * so the user goes through the same planning view (assessments, goal setup)
- * as any other transition — but this one is started manually.
+ * (Deload-vecka) so the user goes through the same planning view
+ * (assessments, goal setup) as any other transition — but this one is
+ * started manually.
  */
 export async function createFirstPeriod() {
   const existing = await store.all("periods");
@@ -46,31 +52,50 @@ export async function createFirstPeriod() {
   return period;
 }
 
-/** Manually starts a 'planning' period that has no predecessor (first period only). */
+/**
+ * Manually starts a 'planning' period that has no predecessor (first period
+ * only). If today is already a Monday, starts immediately. Otherwise the
+ * period keeps waiting (still 'planning') until the coming Monday, and
+ * `pendingAutoStart` tells runLifecycleCheck to flip it to active then even
+ * though it has no predecessorId — normally only auto-created periods do
+ * that automatically.
+ */
 export async function startFirstPeriodNow(periodId) {
   const period = await store.get("periods", periodId);
   if (!period || period.status !== "planning") return;
   const today = todayStr();
-  period.startDate = today;
-  period.endDate = addDays(today, ACTIVE_DURATION_DAYS - 1);
-  period.status = "active";
+
+  if (isoWeekday(today) === 1) {
+    period.startDate = today;
+    period.endDate = addDays(today, ACTIVE_DURATION_DAYS - 1);
+    period.status = "active";
+  } else {
+    period.planningEndDate = nextMonday(today);
+    period.pendingAutoStart = true;
+  }
+
   await store.put("periods", period);
   return period;
 }
 
-/** Extends a planning-status period's window by N days. */
+/**
+ * Extends a planning-status period's window by N days, then re-aligns to
+ * the next Monday on/after that — so a manual extension can only push the
+ * start later, never earlier, and the Monday-alignment invariant on
+ * planningEndDate is never broken by an extension.
+ */
 export async function extendPlanning(periodId, extraDays) {
   const period = await store.get("periods", periodId);
   if (!period || period.status !== "planning") return;
-  period.planningEndDate = addDays(period.planningEndDate, extraDays);
+  period.planningEndDate = nextMonday(addDays(period.planningEndDate, extraDays));
   await store.put("periods", period);
   return period;
 }
 
 /**
  * Call on every app load. Performs any due automatic transitions:
- *   active period past endDate       -> closed, next period auto-created (planning)
- *   planning period past planningEnd -> active
+ *   active period past endDate              -> closed, next period auto-created (Deload-vecka)
+ *   Deload-vecka period reaching planningEnd -> active
  * Loops in case multiple transitions are overdue (e.g. app unopened for a while).
  */
 export async function runLifecycleCheck() {
@@ -87,23 +112,27 @@ export async function runLifecycleCheck() {
       continue;
     }
 
-    // A 'planning' period only auto-advances to 'active' if it was created
-    // automatically (has a predecessorId). The very first period is always
-    // started manually — see wasAutoCreated() below.
+    // A 'planning' (Deload-vecka) period only auto-advances to 'active' if
+    // it was created automatically (has a predecessorId) OR the user
+    // already triggered the first period's manual start and it's just
+    // waiting for the coming Monday (pendingAutoStart).
     const autoPlanning = periods.find(
       (p) =>
         p.status === "planning" &&
         p.planningEndDate &&
-        today > p.planningEndDate &&
+        today >= p.planningEndDate &&
         wasAutoCreated(p),
     );
     if (autoPlanning) {
+      // planningEndDate is always kept Monday-aligned at the moment it's
+      // set (see createFirstPeriod/closePeriodAndCreateNext/extendPlanning/
+      // startFirstPeriodNow), so it can be used directly as the start date
+      // with no further adjustment.
+      const start = autoPlanning.planningEndDate;
       autoPlanning.status = "active";
-      autoPlanning.startDate = addDays(autoPlanning.planningEndDate, 1);
-      autoPlanning.endDate = addDays(
-        autoPlanning.startDate,
-        ACTIVE_DURATION_DAYS - 1,
-      );
+      autoPlanning.startDate = start;
+      autoPlanning.endDate = addDays(start, ACTIVE_DURATION_DAYS - 1);
+      delete autoPlanning.pendingAutoStart;
       await store.put("periods", autoPlanning);
       changed = true;
     }
@@ -111,28 +140,41 @@ export async function runLifecycleCheck() {
 }
 
 function wasAutoCreated(period) {
-  // The first-ever period is created manually and must wait for the user's
-  // explicit "starta period" action, not the automatic clock. We mark that
-  // by the absence of a predecessorId.
-  return !!period.predecessorId;
+  // Auto-created periods (has a predecessorId) always auto-transition.
+  // The very first period only auto-transitions once the user has already
+  // clicked "Starta period" and it's simply waiting for the coming Monday.
+  return !!period.predecessorId || !!period.pendingAutoStart;
 }
 
 /**
- * Closes an active period and creates its successor in 'planning' status,
- * copying weekly/daily goal templates forward.
+ * Closes an active period and creates its successor in 'planning'
+ * (Deload-vecka) status, copying weekly/daily goal templates forward.
  */
 async function closePeriodAndCreateNext(activePeriod) {
   activePeriod.status = "closed";
   await store.put("periods", activePeriod);
 
   const today = todayStr();
+
+  // One-time correction: if the period that just closed didn't itself
+  // start on a Monday (e.g. it predates the calendar-week alignment fix),
+  // target the NEAREST Monday instead of waiting a further 7 days — so
+  // this one Deload-vecka is as short as possible rather than stretched.
+  // Every period created from here on always starts on a Monday, so this
+  // branch can only ever fire once; every later transition automatically
+  // falls into the normal 7-day-then-ceiling case below.
+  const startedOnMonday = isoWeekday(activePeriod.startDate) === 1;
+  const planningEndDate = startedOnMonday
+    ? nextMonday(addDays(today, DEFAULT_PLANNING_DURATION_DAYS))
+    : nextMonday(today);
+
   const nextPeriod = {
     id: newId(),
     status: "planning",
     startDate: null,
     endDate: null,
     planningStartDate: today,
-    planningEndDate: addDays(today, DEFAULT_PLANNING_DURATION_DAYS),
+    planningEndDate,
     periodFocus: { name: "", description: "", imageUrl: "", links: [] },
     predecessorId: activePeriod.id,
     createdAt: Date.now(),

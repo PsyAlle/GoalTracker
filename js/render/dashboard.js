@@ -303,26 +303,77 @@ function renderWeeklyGoalsBlock(goals, currentWeek) {
 // PLANNING VIEW
 // ============================================================
 
+/**
+ * Lets the user log today's daily goals and passloggar during a Deload-vecka,
+ * even though the period hasn't officially started (status is still
+ * 'planning', startDate may still be null). This works because daily goals
+ * are keyed by calendar date, not by week number — dailyGoalsForDate only
+ * needs periodId, never period.startDate. Weekly goals are deliberately NOT
+ * shown here, since "week 1-4" only exists once startDate is set.
+ *
+ * Anything logged here on a date before the eventual (Monday) startDate
+ * stays outside every week's date range once the period activates — so it's
+ * genuinely standalone: recorded, but never counted toward week 1.
+ */
+async function renderStandaloneLoggingSection(period) {
+  const today = todayStr();
+  const dailyGoalsToday = await dailyGoalsForDate(period.id, today);
+
+  const section = el("div");
+  section.appendChild(
+    el("p.goal-meta", {
+      text: "Loggat under Deload-veckan sparas fristående — det räknas inte in i period 1:s veckor när den startar på måndag.",
+      style: "margin-bottom: var(--space-2)",
+    }),
+  );
+  section.appendChild(renderDailyGoalsBlock(dailyGoalsToday, today));
+  section.appendChild(
+    el("div", { style: "margin-top: var(--space-6)" }, [
+      el("div.section-title", { text: "VECKANS MÅL", style: "margin-top: 0" }),
+      el("p", {
+        text: `Dina veckomål syns här när perioden börjar ${formatDateHuman(period.planningEndDate)}.`,
+        class: "goal-meta",
+      }),
+    ]),
+  );
+  section.appendChild(
+    el("button.btn.primary.block", {
+      text: "+ Logga pass",
+      style: "margin-top: var(--space-4); margin-bottom: var(--space-6)",
+      onClick: () =>
+        openSessionLogForm({
+          periodId: period.id,
+          dateStr: today,
+          minDate: period.planningStartDate,
+          maxDate: today,
+          onSaved: refresh,
+        }),
+    }),
+  );
+  return section;
+}
+
 async function renderPlanningView(period) {
   const root = el("div");
   const daysLeft = daysBetween(todayStr(), period.planningEndDate);
+  const waitingToStart = !!period.predecessorId || !!period.pendingAutoStart;
 
   root.appendChild(
     el("p.planning-banner", {}, [
-      el("strong", { text: "Planeringsvecka" }),
+      el("strong", { text: "Deload-vecka" }),
       el("span", {
         text:
-          period.startDate === null && !period.predecessorId
+          period.startDate === null && !waitingToStart
             ? "Fyll i nästa periods fokus och mål, tryck sedan Starta period när du är redo."
             : `Nästa period startar automatiskt ${formatDateHuman(period.planningEndDate)} (om ${Math.max(daysLeft, 0)} dagar).`,
       }),
     ]),
   );
 
-  if (period.predecessorId || period.startDate !== null) {
+  if (waitingToStart || period.startDate !== null) {
     root.appendChild(
       el("button.btn", {
-        text: "+ Förläng planering med 3 dagar",
+        text: "+ Förläng Deload-vecka med 3 dagar",
         style: "margin-bottom: 24px",
         onClick: async () => {
           await extendPlanning(period.id, 3);
@@ -332,18 +383,24 @@ async function renderPlanningView(period) {
     );
   }
 
+  root.appendChild(await renderStandaloneLoggingSection(period));
+
   root.appendChild(await renderAssessmentSection(period));
   root.appendChild(renderPeriodFocusEditor(period));
   root.appendChild(await renderPlanningGoalsSection(period));
 
-  if (!period.predecessorId) {
+  if (!period.predecessorId && !period.pendingAutoStart) {
     root.appendChild(
       el("button.btn.primary.block", {
         text: "Starta period",
         style: "margin-top: 24px",
         onClick: async () => {
-          await startFirstPeriodNow(period.id);
-          toast("Perioden startad!");
+          const updated = await startFirstPeriodNow(period.id);
+          toast(
+            updated?.status === "active"
+              ? "Perioden startad!"
+              : `Startar automatiskt ${formatDateHuman(updated.planningEndDate)}.`,
+          );
           refresh();
         },
       }),
