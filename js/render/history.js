@@ -1,6 +1,6 @@
 // history.js
 import { el, mount, progressFigure, accordionRow } from "./dom.js";
-import { getClosedPeriods } from "../domain/periodLifecycle.js";
+import { getClosedPeriods, getCurrentPeriod } from "../domain/periodLifecycle.js";
 import {
   getWeeklyTracks,
   weeklyVersionForWeek,
@@ -18,6 +18,7 @@ import {
 } from "../domain/sessionLogs.js";
 import { store } from "../db.js";
 import {
+  todayStr,
   formatDateHuman,
   addDays,
   isoWeekday,
@@ -25,28 +26,39 @@ import {
 } from "../domain/dates.js";
 
 export async function renderHistoryPage(container) {
-  const periods = await getClosedPeriods();
+  const closedPeriods = await getClosedPeriods();
+  const current = await getCurrentPeriod();
+  const activePeriod = current && current.status === "active" ? current : null;
+
+  const periods = activePeriod ? [activePeriod, ...closedPeriods] : closedPeriods;
+
   const root = el("div");
 
   if (periods.length === 0) {
     root.appendChild(
-      el("p.empty-state", { text: "Inga avslutade perioder ännu." }),
+      el("p.empty-state", { text: "Inga perioder ännu." }),
     );
     mount(container, root);
     return;
   }
 
-  root.appendChild(el("div.section-title", { text: "AVSLUTADE PERIODER" }));
+  root.appendChild(el("div.section-title", { text: "PERIODER" }));
   for (const period of periods) {
+    const isActive = period.status === "active";
     root.appendChild(
       el(
         "button.history-period-row",
         {
+          class: isActive
+            ? "history-period-row active"
+            : "history-period-row",
           onClick: () => renderPeriodDetail(container, period),
         },
         [
           el("div.h-dates", {
-            text: `${formatDateHuman(period.startDate)} – ${formatDateHuman(period.endDate)}`,
+            text: isActive
+              ? `Pågående sedan ${formatDateHuman(period.startDate)}`
+              : `${formatDateHuman(period.startDate)} – ${formatDateHuman(period.endDate)}`,
           }),
           el("div.h-name", {
             text: period.periodFocus?.name || "(inget periodfokus satt)",
@@ -69,10 +81,14 @@ async function renderPeriodDetail(container, period) {
     }),
   );
 
+  const isActive = period.status === "active";
+
   root.appendChild(
     el("div.period-header", {}, [
       el("div.period-week", {
-        text: `${formatDateHuman(period.startDate)} – ${formatDateHuman(period.endDate)}`,
+        text: isActive
+          ? `Pågående sedan ${formatDateHuman(period.startDate)}`
+          : `${formatDateHuman(period.startDate)} – ${formatDateHuman(period.endDate)}`,
       }),
       el("h2", {
         text: period.periodFocus?.name || "(inget periodfokus satt)",
@@ -98,16 +114,23 @@ async function renderPeriodDetail(container, period) {
  *    had no applicable daily goals at all (weekend, rest day, etc.) — a day
  *    with nothing scheduled counts the same as a day fully cleared.
  *  - plain hairline cell: at least one applicable daily goal was missed.
+ *  - blank/transparent cell: date is still in the future (only relevant for
+ *    the active period — closed periods never have future days). Future
+ *    days are shown neutrally rather than as "missed", and are excluded
+ *    from both the day and week stats below.
  * Each week's row gets a moss-colored border if every weekly goal for that
  * week was fully met (only decorated when the period actually had weekly
  * goals — a period with none doesn't get a false "complete" border).
- * The stats block reuses the same data to show days/weeks/logs totals.
+ * The stats block reuses the same data to show days/weeks/logs totals; a
+ * week only counts toward "veckor klara" once it has fully elapsed, so an
+ * in-progress week for the active period doesn't get counted as a miss.
  */
 async function renderDayGridSection(period) {
   const section = el("div", {}, [
     el("div.section-title", { text: "DAGAR I PERIODEN" }),
   ]);
 
+  const today = todayStr();
   const weeklyTracks = await getWeeklyTracks(period.id);
   const grid = el("div.day-grid-weeks");
 
@@ -117,6 +140,11 @@ async function renderDayGridSection(period) {
   let daysWithGoals = 0;
 
   for (let week = 1; week <= 4; week++) {
+    const weekStart = addDays(period.startDate, (week - 1) * 7);
+    const rawWeekEnd = addDays(weekStart, 6);
+    const weekEnd = rawWeekEnd > period.endDate ? period.endDate : rawWeekEnd;
+    const weekHasElapsed = weekEnd <= today;
+
     let weekComplete = false;
     if (weeklyTracks.length > 0) {
       let anyApplicable = false;
@@ -129,7 +157,7 @@ async function renderDayGridSection(period) {
         if (value < version.targetValue) allMet = false;
       }
       weekComplete = anyApplicable && allMet;
-      if (anyApplicable) {
+      if (anyApplicable && weekHasElapsed) {
         weeksApplicableCount++;
         if (allMet) weeksCompleteCount++;
       }
@@ -139,20 +167,23 @@ async function renderDayGridSection(period) {
       class: weekComplete ? "day-grid-week week-complete" : "day-grid-week",
     });
 
-    const weekStart = addDays(period.startDate, (week - 1) * 7);
     for (let i = 0; i < 7; i++) {
       const date = addDays(weekStart, i);
       if (date > period.endDate) break;
 
-      const dayGoals = await dailyGoalsForDate(period.id, date);
       let cellClass = "day-cell";
-      if (dayGoals.length === 0) {
-        cellClass += " complete";
+      if (date > today) {
+        cellClass += " future";
       } else {
-        daysWithGoals++;
-        if (dayGoals.every((g) => g.value >= g.version.targetValue)) {
+        const dayGoals = await dailyGoalsForDate(period.id, date);
+        if (dayGoals.length === 0) {
           cellClass += " complete";
-          daysMet++;
+        } else {
+          daysWithGoals++;
+          if (dayGoals.every((g) => g.value >= g.version.targetValue)) {
+            cellClass += " complete";
+            daysMet++;
+          }
         }
       }
       weekRow.appendChild(
@@ -269,6 +300,8 @@ const expandedWeekIds = new Set();
  * Weekly goals grouped by week (Vecka 1–4) instead of by track: each week is
  * a collapsible row, showing a moss checkmark if every weekly goal for that
  * week was met. Expanding a week reveals the per-goal breakdown for it.
+ * Weeks that haven't started yet (relevant only for the active period) are
+ * skipped entirely rather than shown as an unmet 0/target row.
  */
 async function renderWeeklyByWeekSection(period, container) {
   const tracks = await getWeeklyTracks(period.id);
@@ -282,10 +315,14 @@ async function renderWeeklyByWeekSection(period, container) {
     return section;
   }
 
+  const today = todayStr();
   const list = el("div.accordion-list");
   let anyWeek = false;
 
   for (let week = 1; week <= 4; week++) {
+    const weekStart = addDays(period.startDate, (week - 1) * 7);
+    if (weekStart > today) continue; // week hasn't started yet
+
     const rows = [];
     let allMet = true;
     let anyApplicable = false;
@@ -397,6 +434,11 @@ async function renderAssessmentsHistory(period, container) {
   return section;
 }
 
+/**
+ * Summary of each daily goal's hit rate across the period. For the active
+ * period this only counts days up to and including today — days that
+ * haven't happened yet would otherwise silently drag the ratio down.
+ */
 async function renderDailyHistory(period) {
   const tracks = await getDailyTracks(period.id);
   const section = el("div", {}, [
@@ -409,6 +451,7 @@ async function renderDailyHistory(period) {
     return section;
   }
 
+  const today = todayStr();
   const ledger = el("div.ledger");
   for (const track of tracks) {
     const versions = await getDailyVersions(track.id);
@@ -419,6 +462,8 @@ async function renderDailyHistory(period) {
     let totalCount = 0;
     for (let i = 0; i < 28; i++) {
       const date = addDays(period.startDate, i);
+      if (date > period.endDate) break;
+      if (date > today) break; // hasn't happened yet
       const applicable = versions.filter((v) => v.effectiveFromDate <= date);
       const version = applicable.length
         ? applicable[applicable.length - 1]
