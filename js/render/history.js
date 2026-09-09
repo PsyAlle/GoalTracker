@@ -1,10 +1,14 @@
 // history.js
-import { el, mount, progressFigure, accordionRow } from "./dom.js";
-import { getClosedPeriods, getCurrentPeriod } from "../domain/periodLifecycle.js";
+import { el, mount, progressFigure, accordionRow, openModal } from "./dom.js";
+import {
+  getClosedPeriods,
+  getCurrentPeriod,
+} from "../domain/periodLifecycle.js";
 import {
   getWeeklyTracks,
   weeklyVersionForWeek,
   weeklyProgressValue,
+  weeklyGoalsForWeek,
   getDailyTracks,
   getDailyVersions,
   dailyGoalsForDate,
@@ -25,105 +29,108 @@ import {
   WEEKDAY_LABELS,
 } from "../domain/dates.js";
 
+/**
+ * Top level: the active period (if any) is shown expanded immediately —
+ * no click required — since it's the one you actually care about day to
+ * day. Closed periods are listed below it, each opening its own detail
+ * view (with a back-link) when tapped.
+ */
 export async function renderHistoryPage(container) {
   const closedPeriods = await getClosedPeriods();
   const current = await getCurrentPeriod();
   const activePeriod = current && current.status === "active" ? current : null;
 
-  const periods = activePeriod ? [activePeriod, ...closedPeriods] : closedPeriods;
-
-  const root = el("div");
-
-  if (periods.length === 0) {
-    root.appendChild(
-      el("p.empty-state", { text: "Inga perioder ännu." }),
-    );
-    mount(container, root);
+  if (!activePeriod && closedPeriods.length === 0) {
+    mount(container, el("p.empty-state", { text: "Inga perioder ännu." }));
     return;
   }
 
-  root.appendChild(el("div.section-title", { text: "PERIODER" }));
-  for (const period of periods) {
-    const isActive = period.status === "active";
-    root.appendChild(
-      el(
-        "button.history-period-row",
-        {
-          class: isActive
-            ? "history-period-row active"
-            : "history-period-row",
-          onClick: () => renderPeriodDetail(container, period),
-        },
-        [
-          el("div.h-dates", {
-            text: isActive
-              ? `Pågående sedan ${formatDateHuman(period.startDate)}`
-              : `${formatDateHuman(period.startDate)} – ${formatDateHuman(period.endDate)}`,
-          }),
-          el("div.h-name", {
-            text: period.periodFocus?.name || "(inget periodfokus satt)",
-          }),
-        ],
-      ),
-    );
+  const root = el("div");
+
+  if (activePeriod) {
+    root.appendChild(renderPeriodHeaderBlock(activePeriod));
+    root.appendChild(await renderPeriodSections(activePeriod, container));
+  }
+
+  if (closedPeriods.length > 0) {
+    root.appendChild(el("div.section-title", { text: "TIDIGARE PERIODER" }));
+    for (const period of closedPeriods) {
+      root.appendChild(
+        el(
+          "button.history-period-row",
+          { onClick: () => renderClosedPeriodDetail(container, period) },
+          [
+            el("div.h-dates", {
+              text: `${formatDateHuman(period.startDate)} – ${formatDateHuman(period.endDate)}`,
+            }),
+            el("div.h-name", {
+              text: period.periodFocus?.name || "(inget periodfokus satt)",
+            }),
+          ],
+        ),
+      );
+    }
   }
 
   mount(container, root);
 }
 
-async function renderPeriodDetail(container, period) {
+async function renderClosedPeriodDetail(container, period) {
   const root = el("div");
-
   root.appendChild(
     el("button.back-link", {
       text: "← Tillbaka till historik",
       onClick: () => renderHistoryPage(container),
     }),
   );
+  root.appendChild(renderPeriodHeaderBlock(period));
+  root.appendChild(await renderPeriodSections(period, container));
+  mount(container, root);
+}
 
+function renderPeriodHeaderBlock(period) {
   const isActive = period.status === "active";
+  return el("div.period-header", {}, [
+    el("div.period-week", {
+      text: isActive
+        ? `Pågående sedan ${formatDateHuman(period.startDate)}`
+        : `${formatDateHuman(period.startDate)} – ${formatDateHuman(period.endDate)}`,
+    }),
+    el("h2", {
+      text: period.periodFocus?.name || "(inget periodfokus satt)",
+    }),
+    period.periodFocus?.description
+      ? el("p.period-desc", { text: period.periodFocus.description })
+      : null,
+  ]);
+}
 
-  root.appendChild(
-    el("div.period-header", {}, [
-      el("div.period-week", {
-        text: isActive
-          ? `Pågående sedan ${formatDateHuman(period.startDate)}`
-          : `${formatDateHuman(period.startDate)} – ${formatDateHuman(period.endDate)}`,
-      }),
-      el("h2", {
-        text: period.periodFocus?.name || "(inget periodfokus satt)",
-      }),
-      period.periodFocus?.description
-        ? el("p.period-desc", { text: period.periodFocus.description })
-        : null,
-    ]),
-  );
-
+async function renderPeriodSections(period, container) {
+  const root = el("div");
   root.appendChild(await renderDayGridSection(period));
   root.appendChild(await renderSessionLogsHistory(period, container));
   root.appendChild(await renderWeeklyByWeekSection(period, container));
   root.appendChild(await renderDailyHistory(period));
   root.appendChild(await renderAssessmentsHistory(period, container));
-
-  mount(container, root);
+  return root;
 }
 
 /**
- * A compact 7-column grid, one row per week, next to a small stats block:
+ * A compact 7-column grid, one row per week, next to a small stats block,
+ * covering the FULL 4-week period regardless of how much has happened yet:
  *  - green cell: every applicable daily goal was met that day, OR the day
- *    had no applicable daily goals at all (weekend, rest day, etc.) — a day
- *    with nothing scheduled counts the same as a day fully cleared.
+ *    had no applicable daily goals at all (weekend, rest day, etc.).
  *  - plain hairline cell: at least one applicable daily goal was missed.
  *  - blank/transparent cell: date is still in the future (only relevant for
  *    the active period — closed periods never have future days). Future
  *    days are shown neutrally rather than as "missed", and are excluded
- *    from both the day and week stats below.
+ *    from both the day and week stats below — this is what lets the grid
+ *    for an active period fill in with green day by day rather than
+ *    starting "wrong" and correcting itself.
  * Each week's row gets a moss-colored border if every weekly goal for that
  * week was fully met (only decorated when the period actually had weekly
- * goals — a period with none doesn't get a false "complete" border).
- * The stats block reuses the same data to show days/weeks/logs totals; a
- * week only counts toward "veckor klara" once it has fully elapsed, so an
- * in-progress week for the active period doesn't get counted as a miss.
+ * goals). Tapping any cell opens that day's daily-goal breakdown together
+ * with the weekly goals for the week it belongs to.
  */
 async function renderDayGridSection(period) {
   const section = el("div", {}, [
@@ -186,8 +193,15 @@ async function renderDayGridSection(period) {
           }
         }
       }
+
+      const cellDate = date;
+      const cellWeek = week;
       weekRow.appendChild(
-        el("div", { class: cellClass, title: formatDateHuman(date) }),
+        el("div", {
+          class: cellClass,
+          title: formatDateHuman(cellDate),
+          onClick: () => openDayDetailModal(period, cellDate, cellWeek),
+        }),
       );
     }
     grid.appendChild(weekRow);
@@ -221,6 +235,71 @@ async function renderDayGridSection(period) {
   return section;
 }
 
+/**
+ * Bottom-sheet showing a single day's daily-goal progress together with
+ * the weekly goals for the week that day falls in. Read-only — this is
+ * history, editing happens from Dashboard/Mål while a period is live.
+ */
+async function openDayDetailModal(period, dateStr, weekNumber) {
+  const [dailyGoals, weeklyGoals] = await Promise.all([
+    dailyGoalsForDate(period.id, dateStr),
+    weeklyGoalsForWeek(period.id, weekNumber),
+  ]);
+
+  openModal((close) => {
+    const children = [
+      el("div.modal-close-bar"),
+      el("h2", { text: formatDateHuman(dateStr) }),
+    ];
+
+    children.push(
+      el("div.section-title", { text: "DAGENS MÅL", style: "margin-top: 0" }),
+    );
+    if (dailyGoals.length === 0) {
+      children.push(el("p.goal-meta", { text: "Inga dagliga mål denna dag." }));
+    } else {
+      const ledger = el("div.ledger");
+      for (const { version, value } of dailyGoals) {
+        ledger.appendChild(
+          el("div.ledger-row", {}, [
+            el("div.name", { text: version.name }),
+            progressFigure(value, version.targetValue),
+          ]),
+        );
+      }
+      children.push(ledger);
+    }
+
+    children.push(
+      el("div.section-title", { text: `VECKA ${weekNumber} — VECKOMÅL` }),
+    );
+    if (weeklyGoals.length === 0) {
+      children.push(
+        el("p.goal-meta", { text: "Inga veckomål den här veckan." }),
+      );
+    } else {
+      const ledger = el("div.ledger");
+      for (const { version, value } of weeklyGoals) {
+        ledger.appendChild(
+          el("div.ledger-row", {}, [
+            el("div.name", { text: version.name }),
+            progressFigure(value, version.targetValue, version.unit),
+          ]),
+        );
+      }
+      children.push(ledger);
+    }
+
+    children.push(
+      el("div.modal-actions", {}, [
+        el("button.btn.block", { text: "Stäng", onClick: close }),
+      ]),
+    );
+
+    return el("div", {}, children);
+  });
+}
+
 async function renderSessionLogsHistory(period, container) {
   const logs = await getSessionLogsForPeriod(period.id);
   const section = el("div", {}, [
@@ -248,7 +327,7 @@ async function renderSessionLogsHistory(period, container) {
           onClick: () => {
             if (expanded) expandedLogIds.delete(log.id);
             else expandedLogIds.add(log.id);
-            renderPeriodDetail(container, period);
+            rerenderPeriod(container, period);
           },
         },
         [
@@ -275,7 +354,7 @@ async function renderSessionLogsHistory(period, container) {
           onClick: async (e) => {
             e.stopPropagation();
             await deleteSessionLog(log.id);
-            renderPeriodDetail(container, period);
+            rerenderPeriod(container, period);
           },
         }),
       ]),
@@ -283,6 +362,19 @@ async function renderSessionLogsHistory(period, container) {
     section.appendChild(card);
   }
   return section;
+}
+
+/**
+ * Re-renders whichever view `period` belongs in: the top-level History page
+ * if it's the active period (since that's shown inline there), or its own
+ * closed-period detail view otherwise.
+ */
+function rerenderPeriod(container, period) {
+  if (period.status === "active") {
+    renderHistoryPage(container);
+  } else {
+    renderClosedPeriodDetail(container, period);
+  }
 }
 
 // Tracks which session-log cards have been manually expanded, keyed by log
@@ -365,7 +457,7 @@ async function renderWeeklyByWeekSection(period, container) {
         onToggle: () => {
           if (expanded) expandedWeekIds.delete(stateKey);
           else expandedWeekIds.add(stateKey);
-          renderPeriodDetail(container, period);
+          rerenderPeriod(container, period);
         },
         body,
       }),
@@ -425,7 +517,7 @@ async function renderAssessmentsHistory(period, container) {
       onToggle: () => {
         if (expanded) expandedAssessmentsIds.delete(period.id);
         else expandedAssessmentsIds.add(period.id);
-        renderPeriodDetail(container, period);
+        rerenderPeriod(container, period);
       },
       body: ledger,
     }),

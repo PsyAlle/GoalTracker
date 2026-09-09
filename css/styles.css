@@ -775,24 +775,33 @@
   }
 
   /* ==========================================================================
-     Day grid (history) — one row per week, one cell per calendar day.
-     Green = every applicable daily goal met that day. Dashed = weekend or no
-     daily goals that day. Plain hairline = at least one goal missed.
-     A moss border around a week's row means every weekly goal for that week
-     was fully met.
+     Day grid (history) — compact grid, one row per week, one cell per
+     calendar day, sitting next to a small stats block. Green = every
+     applicable daily goal met that day, OR no daily goals applied that day
+     at all (weekend, rest day). Plain hairline = at least one goal missed.
+     Transparent/blank = date is still in the future. A moss border around a
+     week's row means every weekly goal for that week was fully met. Cells
+     are clickable — tap a day to see its daily + weekly goal breakdown.
      ========================================================================== */
+  .day-grid-row {
+    display: flex;
+    gap: var(--space-4);
+    align-items: stretch;
+  }
+
   .day-grid-weeks {
+    flex: 0 0 140px;
     display: flex;
     flex-direction: column;
-    gap: var(--space-2);
+    gap: 3px;
   }
 
   .day-grid-week {
     display: grid;
     grid-template-columns: repeat(7, 1fr);
-    gap: 4px;
-    padding: 4px;
-    border-radius: var(--radius);
+    gap: 2px;
+    padding: 2px;
+    border-radius: 4px;
     border: 2px solid transparent;
   }
 
@@ -800,20 +809,37 @@
     border-color: var(--moss);
   }
 
+  .day-grid-stats {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+  }
+
+  .stat-item .stat-value {
+    font-family: var(--font-mono);
+    font-size: 0.95rem;
+    color: var(--moss);
+    line-height: 1.1;
+  }
+
+  .stat-item .stat-label {
+    font-size: 0.68rem;
+    color: var(--ink-muted);
+    line-height: 1.25;
+    margin-top: 1px;
+  }
+
   .day-cell {
     aspect-ratio: 1;
-    border-radius: 4px;
+    border-radius: 3px;
     background: var(--hairline);
+    cursor: pointer;
   }
 
   .day-cell.complete {
     background: var(--moss);
-  }
-
-  .day-cell.weekend,
-  .day-cell.no-goals {
-    background: transparent;
-    border: 1px dashed var(--hairline);
   }
 
   .day-cell.future {
