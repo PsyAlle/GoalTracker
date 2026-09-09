@@ -195,11 +195,6 @@
     font-weight: 600;
     letter-spacing: 0.02em;
   }
-
-  .goal-name.complete {
-    color: var(--moss);
-    font-weight: 600;
-  }
   
   .ledger-row .name .goal-name {
     display: block;
@@ -780,66 +775,24 @@
   }
 
   /* ==========================================================================
-     Accordion — collapsible header/body rows, used for grouped history
-     sections (weekly goals per week, målskattningar).
-     ========================================================================== */
-  .accordion-list {
-    border: 1px solid var(--hairline);
-    border-radius: var(--radius);
-    background: var(--paper-raised);
-    overflow: hidden;
-  }
-
-  .accordion-item + .accordion-item {
-    border-top: 1px solid var(--hairline);
-  }
-
-  .accordion-header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: var(--space-3);
-    padding: var(--space-3) var(--space-4);
-    cursor: pointer;
-  }
-
-  .accordion-header-title {
-    display: flex;
-    align-items: center;
-    gap: var(--space-2);
-  }
-
-  .accordion-body {
-    padding: 0 var(--space-4) var(--space-3);
-  }
-
-  /* ==========================================================================
-     Day grid (history) — compact grid, one row per week, one cell per
-     calendar day, sitting next to a small stats block. Green = every
-     applicable daily goal met that day, OR no daily goals applied that day
-     at all (weekend, rest day). Plain hairline = at least one goal missed.
+     Day grid (history) — one row per week, one cell per calendar day.
+     Green = every applicable daily goal met that day. Dashed = weekend or no
+     daily goals that day. Plain hairline = at least one goal missed.
      A moss border around a week's row means every weekly goal for that week
      was fully met.
      ========================================================================== */
-  .day-grid-row {
-    display: flex;
-    gap: var(--space-4);
-    align-items: stretch;
-  }
-
   .day-grid-weeks {
-    flex: 0 0 140px;
     display: flex;
     flex-direction: column;
-    gap: 3px;
+    gap: var(--space-2);
   }
 
   .day-grid-week {
     display: grid;
     grid-template-columns: repeat(7, 1fr);
-    gap: 2px;
-    padding: 2px;
-    border-radius: 4px;
+    gap: 4px;
+    padding: 4px;
+    border-radius: var(--radius);
     border: 2px solid transparent;
   }
 
@@ -847,36 +800,20 @@
     border-color: var(--moss);
   }
 
-  .day-grid-stats {
-    flex: 1;
-    min-width: 0;
-    display: flex;
-    flex-direction: column;
-    justify-content: space-between;
-  }
-
-  .stat-item .stat-value {
-    font-family: var(--font-mono);
-    font-size: 0.95rem;
-    color: var(--moss);
-    line-height: 1.1;
-  }
-
-  .stat-item .stat-label {
-    font-size: 0.68rem;
-    color: var(--ink-muted);
-    line-height: 1.25;
-    margin-top: 1px;
-  }
-
   .day-cell {
     aspect-ratio: 1;
-    border-radius: 3px;
+    border-radius: 4px;
     background: var(--hairline);
   }
 
   .day-cell.complete {
     background: var(--moss);
+  }
+
+  .day-cell.weekend,
+  .day-cell.no-goals {
+    background: transparent;
+    border: 1px dashed var(--hairline);
   }
 
   .day-cell.future {
@@ -920,6 +857,11 @@
   .history-period-row .h-name {
     font-size: 1.05rem;
     margin-top: 2px;
+  }
+
+  .history-period-row.active .h-dates {
+    color: var(--moss);
+    font-weight: 600;
   }
   
   .back-link {
